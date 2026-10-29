@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Save to InfoOS 设置</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="options-page">
+    <main class="settings-shell">
+      <header class="settings-header">
+        <div class="brand-mark large" aria-hidden="true">信</div>
+        <div>
+          <p class="eyebrow">SAVE TO INFOOS</p>
+          <h1>连接设置</h1>
+          <p>扩展只连接你配置的 InfoOS 产品入口。</p>
+        </div>
+      </header>
+
+      <form id="settings-form" class="settings-card">
+        <label class="field">
+          <span>InfoOS 产品入口地址</span>
+          <input id="base-url" type="url" autocomplete="url" placeholder="https://infoos.example.com" required />
+          <small>正式连接只允许 HTTPS；本机测试可使用 localhost、127.0.0.1 或 ::1。</small>
+        </label>
+
+        <label class="field">
+          <span>捕获 Token</span>
+          <input id="token" type="password" autocomplete="off" placeholder="粘贴仅含 captures:write 的 Token" />
+          <small id="token-hint">Token 只保存在扩展存储中，不会进入网页或日志。</small>
+        </label>
+
+        <label class="field">
+          <span>默认捕获模式</span>
+          <select id="default-mode">
+            <option value="url_only">仅链接（推荐）</option>
+            <option value="readable_content">同时提交当前正文</option>
+          </select>
+        </label>
+
+        <label class="checkbox-field">
+          <input id="auto-close" type="checkbox" />
+          <span>成功后自动关闭弹窗</span>
+        </label>
+
+        <div class="settings-actions">
+          <button id="save-button" class="primary-button" type="submit">保存并测试连接</button>
+          <button id="clear-token" class="secondary-button" type="button">清除 Token</button>
+        </div>
+
+        <p class="shortcut-help">
+          快捷键可在 Chrome 的“扩展程序 → 键盘快捷键”中为“把当前网页交给 InfoOS”配置。
+        </p>
+
+        <section id="connection-result" class="connection-result is-hidden" aria-live="polite"></section>
+      </form>
+    </main>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

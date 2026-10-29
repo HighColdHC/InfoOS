@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+
+cd /opt/infoos/app
+exec /opt/infoos/bin/infoos-run-service infoos-worker-browser-fetch \
+  /opt/infoos/venv/bin/python -m backend.workers.task_worker --base-dir . \
+  --queue browser_fetch --max-workers "${INFOOS_BROWSER_FETCH_WORKERS:-2}" \
+  --batch-limit "${INFOOS_BROWSER_FETCH_BATCH_LIMIT:-2}"

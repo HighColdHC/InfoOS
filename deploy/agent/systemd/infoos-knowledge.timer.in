@@ -1,0 +1,12 @@
+[Unit]
+Description=Schedule the InfoOS external knowledge agent
+
+[Timer]
+OnCalendar=*-*-* @HOURS@:@MINUTE@:00 @TIMEZONE@
+Persistent=true
+AccuracySec=1s
+RandomizedDelaySec=0
+Unit=infoos-knowledge.service
+
+[Install]
+WantedBy=timers.target

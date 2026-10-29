@@ -1,0 +1,22 @@
+/* Empty primitive — icon, description, and primary action. */
+.empty__icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-lg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  margin-bottom: var(--space-sm);
+}
+
+.empty__description {
+  font-size: var(--font-size-md);
+  color: var(--color-text-muted);
+  max-width: 480px;
+  margin: 0;
+  line-height: var(--line-height-normal);
+}
+
+.empty__primary { margin-top: var(--space-md); }

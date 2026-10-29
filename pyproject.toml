@@ -1,0 +1,84 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "infoos"
+version = "0.1.0"
+description = "InfoOS — personal Info OS pipeline for RSS, X, YouTube, web sources"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2,<3",
+  "bcrypt>=5,<6",
+  "PyYAML>=6,<7",
+  "requests>=2.31,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<10",
+  "pytest-xdist>=3,<4",
+]
+web = [
+  "fastapi>=0.115,<1",
+  "httpx>=0.27,<1",
+  "mcp>=1.20,<2",
+  "uvicorn[standard]>=0.30,<1",
+]
+media = [
+  "gallery-dl>=1.27,<2",
+  "openai-whisper>=20250625",
+  "sherpa-onnx==1.13.4",
+  "sherpa-onnx-core==1.13.4",
+  "sherpa-onnx-bin==1.13.4",
+  "soundfile>=0.14,<1",
+  "yt-dlp>=2025.6,<2027",
+  "yt-dlp-ejs>=0.8,<1",
+]
+asr-cuda = [
+  "faster-whisper>=1.1,<2; platform_system == 'Linux' and platform_machine == 'x86_64'",
+  "nvidia-cublas-cu12>=12,<13; platform_system == 'Linux' and platform_machine == 'x86_64'",
+  "nvidia-cudnn-cu12>=9,<10; platform_system == 'Linux' and platform_machine == 'x86_64'",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["backend*"]
+
+[tool.ruff]
+target-version = "py311"
+extend-exclude = ["vendor", "frontend", "clients", "data"]
+
+[tool.ruff.lint]
+select = ["F", "BLE001", "S110", "S112"]
+
+[tool.ruff.lint.per-file-ignores]
+# TaskRetryDecision is an application-layer type; even TYPE_CHECKING imports violate the storage boundary.
+"backend/infrastructure/storage/tasks/repository_mutations.py" = ["F821"]
+# Has uncommitted local edits in the main worktree; clean up once those land.
+"backend/application/enrichment/media/artifacts.py" = ["F401", "F841"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["backend/read_models"]
+# Report only read-model errors; imported modules are analysed for their types.
+follow_imports = "silent"
+ignore_missing_imports = true
+warn_unused_ignores = true
+
+# Read models expose typed rows and responses; JSON boundaries stay JsonObject.
+[[tool.mypy.overrides]]
+module = ["backend.read_models", "backend.read_models.*"]
+disallow_any_explicit = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-vv --tb=short -n 0"
+markers = [
+  "fault: deterministic fault-injection tests",
+  "no_storage_bootstrap: opt out of the normal explicit runtime storage bootstrap",
+]

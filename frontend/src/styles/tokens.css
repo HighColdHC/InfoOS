@@ -1,0 +1,203 @@
+/* InfoOS design tokens — "Signal" system.
+ *
+ * An intelligence console: quiet ink surfaces, one luminous iris accent,
+ * and a cool aurora (iris → azure → cyan) reserved for signal moments —
+ * scores, focus, the active page. Light mode reads like paper under glass;
+ * dark mode is the native habitat. Variable names are stable so every
+ * module stylesheet follows the theme without local overrides.
+ */
+
+:root {
+ color-scheme: light;
+
+ /* Accent — iris */
+ --color-accent: #5b4df0;
+ --color-accent-hover: #4c3ee6;
+ --color-accent-soft: #ecebfe;
+ --color-accent-subtle: #f5f4ff;
+ --color-accent-ring: rgba(91, 77, 240, 0.28);
+ --color-on-accent: #ffffff;
+
+ /* Aurora — used only for signal moments */
+ --aurora-1: #7c6cff;
+ --aurora-2: #4f8bff;
+ --aurora-3: #22c3ee;
+ --aurora-4: #f472b6;
+ --gradient-accent: linear-gradient(135deg, #5b4df0 0%, #4759df 45%, #266bcb 100%);
+ --gradient-signal: linear-gradient(90deg, #7c6cff 0%, #4f8bff 50%, #22c3ee 100%);
+ --gradient-text: linear-gradient(120deg, #2a1fb8 0%, #5b4df0 40%, #2f7fe8 100%);
+
+ /* Surfaces */
+ --color-bg: #f2f3f7;
+ --color-bg-elevated: #ffffff;
+ --color-surface: #ffffff;
+ --color-surface-soft: #f6f7fa;
+ --color-surface-muted: #eceef3;
+ --color-surface-sunken: #eef0f4;
+
+ /* Text */
+ --color-text: #0c0e14;
+ --color-text-muted: #596071;
+ --color-text-subtle: #646c7c;
+ --color-text-inverse: #ffffff;
+
+ /* Borders */
+ --color-border: rgba(16, 22, 40, 0.09);
+ --color-border-strong: rgba(16, 22, 40, 0.16);
+ --color-border-subtle: rgba(16, 22, 40, 0.06);
+ --color-hairline: rgba(255, 255, 255, 0.7);
+
+ /* Status */
+ --color-success: #087a51;
+ --color-success-soft: #e3f6ee;
+ --color-warning: #995300;
+ --color-warning-soft: #fdf1df;
+ --color-danger: #c52c3a;
+ --color-danger-hover: #c22d37;
+ --color-danger-soft: #fdebec;
+ --color-info: #2f6fe0;
+ --color-info-soft: #e7effd;
+
+ --color-white: #ffffff;
+ --color-black: #000000;
+ /* Ink for shadows and compositing; deep ink for dark stages and backdrops. */
+ --color-ink: #101628;
+ --color-ink-deep: #07080c;
+
+ --color-cyan-label: #08718d;
+ --color-pink-label: #a62c70;
+ --gradient-exploration: linear-gradient(135deg, var(--aurora-3), var(--aurora-2));
+ --gradient-landmark: linear-gradient(135deg, var(--color-warning), var(--aurora-4));
+ --icon-shield: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3Cpath d='m9 12 2 2 4-4'/%3E%3C/svg%3E");
+ --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%23646c7c' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M1.5 1.75l4.5 4.5 4.5-4.5'/%3E%3C/svg%3E");
+
+ /* Glass */
+ --color-glass-bg: rgba(255, 255, 255, 0.66);
+ --color-glass-bg-strong: rgba(255, 255, 255, 0.84);
+ --blur-glass: saturate(180%) blur(20px);
+ --blur-modal: saturate(140%) blur(14px);
+
+ /* Type */
+ --font-heading: "SF Pro Display", -apple-system, BlinkMacSystemFont, "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei", "Segoe UI", sans-serif;
+ --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei", "Segoe UI", sans-serif;
+ --font-serif: "Songti SC", "Noto Serif SC", "Source Han Serif SC", "STSong", "Iowan Old Style", Georgia, serif;
+ --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, Menlo, Consolas, monospace;
+ --font-size-2xs: 11px;
+ --font-size-xs: 12px;
+ --font-size-sm: 13px;
+ --font-size-md: 14px;
+ --font-size-lg: 16px;
+ --font-size-xl: 20px;
+ --font-size-2xl: 26px;
+ --line-height-tight: 1.2;
+ --line-height-normal: 1.55;
+ --font-weight-normal: 400;
+ --font-weight-medium: 500;
+ --font-weight-semibold: 600;
+ --font-weight-bold: 700;
+ --tracking-tight: -0.022em;
+ --tracking-caps: 0.08em;
+
+ /* Spacing */
+ --space-2xs: 2px;
+ --space-xs: 4px;
+ --space-sm: 8px;
+ --space-md: 12px;
+ --space-lg: 16px;
+ --space-xl: 24px;
+ --space-2xl: 32px;
+ --space-3xl: 48px;
+
+ /* Radii */
+ --radius-xs: 6px;
+ --radius-sm: 8px;
+ --radius-md: 10px;
+ --radius-lg: 14px;
+ --radius-xl: 20px;
+ --radius-2xl: 28px;
+ --radius-pill: 999px;
+
+ /* Elevation — layered, low-contrast */
+ --color-media-overlay: color-mix(in srgb, var(--color-ink-deep) 88%, transparent);
+ --shadow-xs: 0 1px 2px rgba(16, 22, 40, 0.05);
+ --shadow-sm: 0 1px 2px rgba(16, 22, 40, 0.04), 0 2px 6px -1px rgba(16, 22, 40, 0.06);
+ --shadow-md: 0 2px 4px -2px rgba(16, 22, 40, 0.05), 0 12px 24px -6px rgba(16, 22, 40, 0.1);
+ --shadow-lg: 0 4px 8px -4px rgba(16, 22, 40, 0.06), 0 24px 48px -12px rgba(16, 22, 40, 0.18);
+ --shadow-xl: 0 8px 16px -8px rgba(16, 22, 40, 0.08), 0 40px 80px -20px rgba(16, 22, 40, 0.28);
+ --shadow-accent: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 6px 18px -4px rgba(91, 77, 240, 0.5);
+ --shadow-glow: 0 0 0 1px rgba(91, 77, 240, 0.16), 0 10px 32px -8px rgba(91, 77, 240, 0.36);
+ --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+
+ /* Shared focus and decorative shadows */
+ --shadow-focus: 0 0 0 4px var(--color-accent-ring);
+ --shadow-focus-sm: 0 0 0 3px var(--color-accent-ring);
+ --shadow-divider: 0 1px 0 var(--color-border-subtle);
+ --shadow-status: inset 0 0 0 1px color-mix(in srgb, currentColor 18%, transparent);
+ --shadow-status-hover: inset 0 0 0 1px color-mix(in srgb, currentColor 32%, transparent), 0 4px 14px -6px currentColor;
+ --shadow-callout: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 16%, transparent), var(--shadow-sm);
+ --shadow-ping: 0 0 12px var(--color-accent-ring);
+ /* Motion */
+ --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+ --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+ --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+ --duration-slow: 420ms;
+ --motion-stagger-step: 40ms;
+ --motion-delay-max: 200ms;
+ --transition-fast: 140ms var(--ease-out);
+ --transition-normal: 220ms var(--ease-out);
+ --transition-slow: 420ms var(--ease-out);
+ --transition-interactive: color 160ms var(--ease-out), background-color 160ms var(--ease-out), border-color 160ms var(--ease-out), box-shadow 220ms var(--ease-out), transform 220ms var(--ease-out), opacity 160ms var(--ease-out);
+
+ /* Layout */
+ --sidebar-width: 248px;
+ --workspace-padding: clamp(16px, 2.2vw, 32px);
+ --modal-width: 960px;
+}
+
+[data-theme="dark"] {
+ color-scheme: dark;
+
+ --color-cyan-label: #6bdaef;
+ --color-pink-label: #f9a6d2;
+ --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%239199a9' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M1.5 1.75l4.5 4.5 4.5-4.5'/%3E%3C/svg%3E");
+ --color-bg: #07080c;
+ --color-bg-elevated: #0f1117;
+ --color-surface: #12141b;
+ --color-surface-soft: #171a22;
+ --color-surface-muted: #1f232d;
+ --color-surface-sunken: #0b0d12;
+ --color-text: #eceef4;
+ --color-text-muted: #9ba2b1;
+ --color-text-subtle: #9199a9;
+ --color-border: rgba(255, 255, 255, 0.08);
+ --color-border-strong: rgba(255, 255, 255, 0.15);
+ --color-border-subtle: rgba(255, 255, 255, 0.05);
+ --color-hairline: rgba(255, 255, 255, 0.06);
+ --color-accent: #8f85ff;
+ --color-accent-hover: #a39bff;
+ --color-accent-soft: rgba(143, 133, 255, 0.16);
+ --color-accent-subtle: rgba(143, 133, 255, 0.08);
+ --color-accent-ring: rgba(143, 133, 255, 0.34);
+ --gradient-text: linear-gradient(120deg, #ffffff 0%, #c9c4ff 45%, #8fd8ff 100%);
+ --color-success: #3ddc97;
+ --color-success-soft: rgba(61, 220, 151, 0.12);
+ --color-warning: #f5b544;
+ --color-warning-soft: rgba(245, 181, 68, 0.13);
+ --color-danger: #ff6b72;
+ --color-danger-hover: #ff8a90;
+ --color-danger-soft: rgba(255, 107, 114, 0.13);
+ --color-info: #6aa8ff;
+ --color-info-soft: rgba(106, 168, 255, 0.13);
+ --color-glass-bg: rgba(16, 18, 25, 0.62);
+ --color-glass-bg-strong: rgba(16, 18, 25, 0.82);
+
+ --color-media-overlay: color-mix(in srgb, var(--color-ink-deep) 92%, transparent);
+ --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+ --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px -2px rgba(0, 0, 0, 0.4);
+ --shadow-md: 0 2px 4px -2px rgba(0, 0, 0, 0.5), 0 14px 28px -8px rgba(0, 0, 0, 0.55);
+ --shadow-lg: 0 4px 8px -4px rgba(0, 0, 0, 0.5), 0 28px 56px -14px rgba(0, 0, 0, 0.7);
+ --shadow-xl: 0 8px 16px -8px rgba(0, 0, 0, 0.6), 0 44px 90px -20px rgba(0, 0, 0, 0.8);
+ --shadow-accent: 0 1px 0 rgba(255, 255, 255, 0.22) inset, 0 8px 24px -6px rgba(124, 108, 255, 0.6);
+ --shadow-glow: 0 0 0 1px rgba(143, 133, 255, 0.22), 0 12px 40px -10px rgba(124, 108, 255, 0.55);
+ --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}

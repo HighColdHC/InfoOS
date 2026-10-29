@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+cd /opt/infoos/app
+exec /opt/infoos/bin/infoos-run-service infoos-feishu-inbox \
+  /opt/infoos/venv/bin/python -m backend.workers.feishu_inbox --base-dir .

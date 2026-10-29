@@ -1,0 +1,103 @@
+#!/opt/infoos/venv/bin/python
+from __future__ import annotations
+
+import os
+import re
+from pathlib import Path
+
+
+MANAGED_TOP_LEVEL_KEYS = {
+    "allow-lan",
+    "authentication",
+    "bind-address",
+    "external-controller",
+    "external-controller-cors",
+    "external-controller-pipe",
+    "external-controller-tls",
+    "external-controller-unix",
+    "lan-allowed-ips",
+    "lan-disallowed-ips",
+    "listeners",
+    "mixed-port",
+    "port",
+    "redir-port",
+    "secret",
+    "skip-auth-prefixes",
+    "socks-port",
+    "tproxy-port",
+    "tun",
+}
+TOP_LEVEL_KEY = re.compile(r"^([A-Za-z0-9_-]+)\s*:")
+DNS_LISTEN = re.compile(r"^\s+listen\s*:")
+
+
+def _managed_runtime_config(source: str, mixed_port: int) -> str:
+    output: list[str] = []
+    skipped_key: str | None = None
+    current_top_level_key: str | None = None
+
+    for line in source.splitlines():
+        match = TOP_LEVEL_KEY.match(line)
+        if skipped_key is not None:
+            if match is None:
+                continue
+            skipped_key = None
+
+        if match is not None:
+            current_top_level_key = match.group(1)
+            if current_top_level_key in MANAGED_TOP_LEVEL_KEYS:
+                skipped_key = current_top_level_key
+                continue
+
+        if current_top_level_key == "dns" and DNS_LISTEN.match(line):
+            continue
+        if line.strip() == "...":
+            continue
+        output.append(line)
+
+    output.extend(
+        [
+            "",
+            "# InfoOS-owned loopback-only inbound. Do not edit the generated file.",
+            f"mixed-port: {mixed_port}",
+            "allow-lan: false",
+            'bind-address: "127.0.0.1"',
+            "listeners: []",
+            "tun:",
+            "  enable: false",
+            "",
+        ]
+    )
+    return "\n".join(output)
+
+
+def main() -> None:
+    source_path = Path(
+        os.environ.get(
+            "INFOOS_EMBEDDED_PROXY_CONFIG",
+            "/var/lib/infoos/state/proxy/source.yaml",
+        )
+    )
+    runtime_dir = Path(
+        os.environ.get("INFOOS_EMBEDDED_PROXY_RUNTIME_DIR", "/tmp/infoos-proxy")
+    )
+    runtime_path = runtime_dir / "config.yaml"
+    mixed_port = int(os.environ.get("INFOOS_EMBEDDED_PROXY_MIXED_PORT", "17897"))
+    if not 1024 <= mixed_port <= 65535:
+        raise SystemExit("INFOOS_EMBEDDED_PROXY_MIXED_PORT must be between 1024 and 65535")
+    if not source_path.is_file() or source_path.stat().st_size == 0:
+        raise SystemExit("embedded proxy source config is missing or empty")
+
+    runtime_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    runtime_dir.chmod(0o700)
+    temporary = runtime_path.with_suffix(".tmp")
+    temporary.write_text(
+        _managed_runtime_config(source_path.read_text(), mixed_port),
+        encoding="utf-8",
+    )
+    temporary.chmod(0o600)
+    os.replace(temporary, runtime_path)
+
+
+if __name__ == "__main__":
+    main()

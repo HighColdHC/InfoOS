@@ -1,0 +1,87 @@
+/* Signal components — platform marks, score rings, meters, kbd chips. */
+
+/* ===== Platform mark ===== */
+.platform-mark { display: inline-flex; align-items: center; gap: 7px; min-width: 0; --pm: #6b7280; --pm-fg: #fff; }
+.platform-mark__glyph {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: var(--pm);
+  color: var(--pm-fg);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12) inset, 0 3px 8px -3px var(--pm);
+}
+.platform-mark--sm .platform-mark__glyph { width: 18px; height: 18px; border-radius: 6px; }
+.platform-mark--sm .platform-mark__glyph svg { width: 11px; height: 11px; }
+.platform-mark--lg .platform-mark__glyph { width: 36px; height: 36px; border-radius: 11px; }
+.platform-mark--lg .platform-mark__glyph svg { width: 18px; height: 18px; }
+.platform-mark--lg .platform-mark__text { font-size: 16px; }
+.platform-mark__text { font-family: var(--font-heading); font-size: 11px; font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
+.platform-mark--sm .platform-mark__text { font-size: 9.5px; }
+.platform-mark__label { min-width: 0; overflow: hidden; color: var(--color-text); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
+
+.platform-mark[data-platform="x"] { --pm: #0f1115; }
+[data-theme="dark"] .platform-mark[data-platform="x"] { --pm: #f2f3f5; --pm-fg: #0f1115; }
+.platform-mark[data-platform="youtube"] { --pm: #ff1f3d; }
+.platform-mark[data-platform="rss"] { --pm: #f78a1d; }
+.platform-mark[data-platform="reddit"] { --pm: #ff4500; }
+.platform-mark[data-platform="github"] { --pm: #24292f; }
+[data-theme="dark"] .platform-mark[data-platform="github"] { --pm: #6e7681; }
+.platform-mark[data-platform="hackernews"] { --pm: #ff6600; }
+.platform-mark[data-platform="producthunt"] { --pm: #da552f; }
+.platform-mark[data-platform="xiaohongshu"] { --pm: #ff2442; }
+.platform-mark[data-platform="douyin"] { --pm: linear-gradient(135deg, #25f4ee 0%, #111 45%, #111 55%, #fe2c55 100%); --pm-fg: #fff; }
+.platform-mark[data-platform="douyin"] .platform-mark__glyph { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14) inset, 0 3px 8px -3px #fe2c55; }
+.platform-mark[data-platform="zsxq"], .platform-mark[data-platform="scys"] { --pm: #16a26b; }
+.platform-mark[data-platform="web"], .platform-mark[data-platform="web_monitor"] { --pm: #4f6bff; }
+
+/* ===== Score ring ===== */
+.score-ring { position: relative; display: inline-grid; place-items: center; flex: 0 0 auto; }
+.score-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+.score-ring__track { fill: none; stroke: var(--color-surface-muted); stroke-width: 3; }
+.score-ring__value {
+  fill: none;
+  stroke: var(--color-text-subtle);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dashoffset: var(--ring-offset);
+  animation: fade-in var(--duration-slow) var(--ease-out) both;
+}
+.score-ring[data-tone="pass"] .score-ring__value { stroke: var(--color-accent); filter: drop-shadow(0 0 3px var(--color-accent-ring)); }
+.score-ring[data-tone="near"] .score-ring__value { stroke: var(--color-warning); }
+.score-ring[data-tone="low"] .score-ring__value { stroke: var(--color-text-subtle); }
+.score-ring__number { position: relative; font-family: var(--font-heading); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--color-text); letter-spacing: -0.02em; }
+.score-ring[data-tone="low"] .score-ring__number { color: var(--color-text-muted); }
+
+/* ===== Meter bar ===== */
+.signal-meter { display: grid; gap: 6px; min-width: 0; }
+.signal-meter__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: var(--color-text-muted); font-size: var(--font-size-xs); }
+.signal-meter__head strong { color: var(--color-text); font-family: var(--font-heading); font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.signal-meter__track { position: relative; height: 6px; overflow: hidden; border-radius: var(--radius-pill); background: var(--color-surface-muted); }
+.signal-meter__fill { position: absolute; inset: 0 auto 0 0; width: var(--value, 0%); border-radius: inherit; background: var(--gradient-signal); box-shadow: 0 0 12px -2px var(--color-accent-ring); transform-origin: left; animation: meter-grow 1100ms var(--ease-out) both; }
+.signal-meter[data-tone="low"] .signal-meter__fill { background: var(--color-text-subtle); box-shadow: none; }
+.signal-meter[data-tone="near"] .signal-meter__fill { background: var(--color-warning); box-shadow: none; }
+.signal-meter__threshold { position: absolute; top: -2px; bottom: -2px; left: 60%; width: 2px; border-radius: 1px; background: var(--color-surface); box-shadow: 0 0 0 1px var(--color-border); }
+@keyframes meter-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* ===== Tag chip ===== */
+.signal-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+.signal-chip--accent { background: var(--color-accent-soft); color: var(--color-accent); }
+.signal-chip--success { background: var(--color-success-soft); color: var(--color-success); }
+.signal-chip--warning { background: var(--color-warning-soft); color: var(--color-warning); }
+.signal-chip--danger { background: var(--color-danger-soft); color: var(--color-danger); }
+.signal-chip--outline { background: transparent; box-shadow: inset 0 0 0 1px var(--color-border); }

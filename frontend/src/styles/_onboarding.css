@@ -1,0 +1,235 @@
+.onboarding-card .setup-card-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  margin-right: var(--space-md);
+}
+
+/* Onboarding modal — step title, dots, actions, and modal body. */
+.onboarding {
+  display: grid;
+  gap: var(--space-lg);
+  padding: var(--space-xl);
+  text-align: center;
+}
+
+.onboarding-step {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.onboarding-title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--font-size-xl);
+}
+
+.onboarding-dots {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-sm);
+  margin: var(--space-sm) 0;
+}
+
+.onboarding-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  transition: transform var(--transition-slow), opacity var(--transition-normal);
+}
+
+.onboarding-dot.is-active { transform: scaleX(2); background: var(--gradient-accent); box-shadow: var(--shadow-accent); }
+
+.onboarding-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.setup-mode {
+  gap: var(--space-md);
+  text-align: left;
+}
+
+/* Setup mode — out-of-flow helper for the dedicated Chrome launcher. */
+.setup-helper {
+  display: grid;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-surface-soft) 86%, var(--color-accent-subtle) 14%);
+  text-align: left;
+}
+
+.setup-helper > header > h3 {
+  margin: 0 0 var(--space-xs) 0;
+  font-family: var(--font-heading);
+  font-size: var(--font-size-md);
+}
+
+.setup-helper > header > p {
+  margin: 0 0 var(--space-sm) 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.setup-helper > .setup-card-error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+}
+
+.setup-card .card {
+  background: var(--color-surface);
+  border-color: var(--color-border-subtle);
+}
+
+.setup-card .card__header {
+  min-height: auto;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+}
+
+.setup-card-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.setup-card .card__actions-bar {
+  padding: var(--space-md) var(--space-lg);
+}
+
+.setup-card .card > p,
+.setup-card .card > .platform-list {
+  margin: 0;
+  padding: 0 var(--space-lg) var(--space-lg);
+}
+
+/* Platform list — explicit data-status colors so the user can see at a
+glance which platforms still need attention. */
+.platform-list {
+  display: grid;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.platform-list > li {
+  display: grid;
+  grid-template-columns: minmax(80px, max-content) max-content minmax(0, 1fr) max-content max-content;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+}
+
+.platform-list > li[data-status="verified"] {
+  background: var(--color-success-soft);
+}
+
+.platform-list > li[data-status="needs_login"] {
+  background: var(--color-warning-soft);
+}
+
+.platform-list > li[data-status="failed"] {
+  background: var(--color-danger-soft);
+}
+
+.platform-list__name {
+  font-weight: var(--font-weight-semibold);
+}
+
+.platform-list__status {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono, monospace);
+}
+
+.platform-list__error {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.platform-list .hint {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 640px) {
+  .onboarding {
+    padding: var(--space-lg);
+  }
+
+  .onboarding-actions {
+    flex-wrap: wrap;
+  }
+
+  .onboarding-actions .btn {
+    flex: 1 1 auto;
+  }
+
+  .setup-card .card__header {
+    grid-template-columns: 1fr auto;
+  }
+
+  .setup-card-step {
+    grid-column: 1 / -1;
+    width: fit-content;
+  }
+
+  .platform-list > li {
+    grid-template-columns: 1fr auto;
+    align-items: start;
+  }
+
+  .platform-list__error {
+    grid-column: 1 / -1;
+    white-space: normal;
+  }
+
+  .platform-list .btn {
+    width: 100%;
+  }
+}
+
+.modal-card .setup-mode { padding: var(--space-sm); }
+.modal-card .setup-helper { min-width: 0; }
+.modal-card .platform-list__error { overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { .modal-card .onboarding-dot { transition: none; } }
+
+.modal-card .onboarding-card .setup-card-step { width: auto; min-width: 56px; padding-inline: var(--space-sm); margin-right: 0; }
+.modal-card .platform-list > li { grid-template-columns: minmax(72px, .7fr) repeat(3, minmax(0, 1fr)); gap: var(--space-sm); }
+.modal-card .platform-list .btn { justify-self: start; }
+.modal-card .platform-list__status { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .modal-card .platform-list > li { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .modal-card .platform-list__status { grid-column: 1 / -1; }
+}

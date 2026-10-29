@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+
+cd /opt/infoos/app
+exec /opt/infoos/bin/infoos-run-service infoos-worker-card-pipeline \
+  /opt/infoos/venv/bin/python -m backend.workers.task_worker --base-dir . \
+  --queue card_pipeline --max-workers "${INFOOS_CARD_PIPELINE_WORKERS:-4}"

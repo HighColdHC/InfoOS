@@ -1,0 +1,6 @@
+{
+  "id": 1,
+  "html_url": "https://github.com/example/project/issues/1",
+  "title": "Run checks",
+  "body_html": "<p>Run tests, formatting, linting.</p><a href=\"#issuecomment-1\">Thread</a><a href=\"https://example.com/guide\">Guide</a>"
+}

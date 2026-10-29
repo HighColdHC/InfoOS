@@ -1,0 +1,22 @@
+[Unit]
+Description=InfoOS FastAPI web service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=infoos
+Group=infoos
+WorkingDirectory=/opt/infoos/app
+EnvironmentFile=/etc/infoos/infoos.env
+ExecStart=/opt/infoos/app/.venv/bin/uvicorn backend.app.main:app --host ${INFOOS_WEB_HOST} --port ${INFOOS_WEB_PORT}
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/infoos
+
+[Install]
+WantedBy=multi-user.target

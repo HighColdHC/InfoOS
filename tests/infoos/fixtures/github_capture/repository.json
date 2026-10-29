@@ -1,0 +1,14 @@
+{
+  "id": 890668799,
+  "full_name": "example/project",
+  "html_url": "https://github.com/example/project",
+  "description": "Model Context Protocol Servers",
+  "owner": {
+    "login": "example",
+    "html_url": "https://github.com/example"
+  },
+  "updated_at": "2026-10-27T09:37:46Z",
+  "stargazers_count": 91597,
+  "language": "TypeScript",
+  "topics": []
+}

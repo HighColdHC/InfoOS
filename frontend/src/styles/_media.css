@@ -1,0 +1,61 @@
+/* Media placeholders + image lightbox. */
+.media-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  padding: var(--space-xl);
+  background: var(--color-surface-muted);
+  border: 2px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  text-align: center;
+  gap: var(--space-sm);
+}
+
+.media-placeholder-icon {
+  font-size: var(--font-size-2xl);
+  opacity: 0.6;
+}
+
+.media-placeholder p {
+  font-size: var(--font-size-md);
+  margin: 0;
+  max-width: 280px;
+}
+
+.image-expand-button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: zoom-in;
+  display: block;
+  width: 100%;
+}
+
+.image-lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: var(--color-media-overlay);
+  display: grid;
+  place-items: center;
+  padding: var(--space-xl);
+  cursor: zoom-out;
+}
+
+.image-lightbox-img {
+  max-width: 92vw;
+  max-height: 92vh;
+  object-fit: contain;
+  border-radius: var(--radius-xs);
+  box-shadow: var(--shadow-xl);
+}
+
+@media (max-width: 860px) {
+  .image-lightbox-img {
+    max-width: 96vw;
+    max-height: 80vh;
+  }
+}

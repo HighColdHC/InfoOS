@@ -1,0 +1,61 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+.env*
+!deploy/docker/.env.example
+
+# Vendored artifacts
+
+# Test / tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.playwright-cli/
+output/
+.codex-tmp/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+frontend/*.tsbuildinfo
+clients/save-to-infoos/node_modules/
+clients/save-to-infoos/dist/
+clients/save-to-infoos/coverage/
+tmp/
+.agents/
+skills-lock.json
+
+# OS / editor noise
+.DS_Store
+.vscode/
+.idea/
+.worktrees/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Runtime generated artifacts
+/data/
+*.token
+*.sqlite*
+*.db
+*.db-*
+*.log
+*.log.*
+logs/
+infoos-*.png
+.omx/
+.playwright-mcp/
+.claude/
+
+# Local deepwork session state
+.slim/deepwork/

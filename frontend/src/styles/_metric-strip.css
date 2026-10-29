@@ -1,0 +1,74 @@
+/* Metric strip — label, oversized figure, and a glowing icon tile. */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+}
+.metric-grid[data-cols="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.metric-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "label icon" "value trend";
+  align-items: end;
+  gap: 14px 10px;
+  min-height: 108px;
+  padding: 18px 20px;
+}
+.metric-card__head { display: contents; }
+
+.metric-card__icon {
+  grid-area: icon;
+  align-self: start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--metric-tone, var(--aurora-1)) 14%, var(--color-surface));
+  color: color-mix(in srgb, var(--metric-tone, var(--aurora-1)) 80%, var(--color-text));
+  box-shadow: var(--shadow-sm);
+  transition: transform 500ms var(--ease-spring);
+}
+.metric-card:hover .metric-card__icon { transform: rotate(-8deg) scale(1.08); }
+
+.metric-card__trend {
+  grid-area: trend;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-subtle);
+}
+
+.metric-card__value {
+  grid-area: value;
+  font-family: var(--font-heading);
+  font-size: 32px;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  letter-spacing: -0.035em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-card__label {
+  grid-area: label;
+  align-self: start;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  letter-spacing: 0.02em;
+}
+
+@media (max-width: 1100px) {
+  .metric-grid, .metric-grid[data-cols="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 520px) {
+  .metric-grid,
+  .metric-grid[data-cols="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .metric-card { min-height: 92px; padding: 14px 16px; }
+  .metric-card__value { font-size: 26px; }
+}

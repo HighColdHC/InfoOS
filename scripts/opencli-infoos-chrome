@@ -1,0 +1,602 @@
+#!/usr/bin/env bash
+set -u
+
+STATE_HOME="${INFOOS_STATE_HOME:-${HOME}/.infoos}"
+PROFILE_DIR="${INFOOS_CHROME_PROFILE_DIR:-${STATE_HOME}/chrome-profile}"
+JSON_PATH="${INFOOS_BROWSER_SESSION_JSON:-${STATE_HOME}/browser-session.json}"
+LOCK_PATH="${INFOOS_BROWSER_SESSION_LOCK:-${STATE_HOME}/browser-session.json.lock}"
+PLATFORM="$(uname -s)"
+if [[ "$PLATFORM" == "Darwin" ]]; then
+  DEFAULT_LOG_DIR="${HOME}/Library/Logs/opencli"
+else
+  DEFAULT_LOG_DIR="${STATE_HOME}/logs/opencli"
+fi
+LOG_DIR="${INFOOS_OPENCLI_LOG_DIR:-$DEFAULT_LOG_DIR}"
+EXPECTED_ALIAS="infoos-fetch"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BINDING_HELPER="${INFOOS_BROWSER_BINDING_HELPER:-$SCRIPT_DIR/infoos-browser-binding.py}"
+PYTHON_BIN="${INFOOS_PYTHON_EXECUTABLE:-python3}"
+OPENCLI_RUNTIME_VERSION="${INFOOS_OPENCLI_CLI_VERSION:-1.8.6}"
+MANAGED_OPENCLI_BIN="$HOME/InfoOS/runtime/opencli/$OPENCLI_RUNTIME_VERSION/node_modules/.bin/opencli"
+OPENCLI_WEBSTORE_EXTENSION_ID="ildkmabpimmkaediidaifkhjpohdnifk"
+RESTART=0
+RECONNECTED_CONTEXT_ALLOWED=0
+HEADLESS=0
+LAUNCH_ONLY=0
+PERSISTENCE_CHECK=0
+SUPERVISED_CONTAINER_BIND=0
+BROWSER_RUNTIME="${INFOOS_BROWSER_RUNTIME:-native}"
+PREVIOUS_CHROME_PID=""
+POSITIONAL_ARGS=()
+while (( $# > 0 )); do
+  case "$1" in
+    --restart) RESTART=1 ;;
+    --headless) HEADLESS=1 ;;
+    --launch-only) LAUNCH_ONLY=1 ;;
+    --persistence-check) PERSISTENCE_CHECK=1 ;;
+    --bind-supervised-container) SUPERVISED_CONTAINER_BIND=1 ;;
+    *) POSITIONAL_ARGS+=("$1") ;;
+  esac
+  shift
+done
+START_URL="${POSITIONAL_ARGS[0]:-${INFOOS_CHROME_START_URL:-https://x.com/home}}"
+mkdir -p "$PROFILE_DIR" "$LOG_DIR" "$(dirname "$JSON_PATH")"
+
+fail_launcher() {
+  printf '%s\n' "$1" | tee -a "$LOG_DIR/chrome-open.err.log" >&2
+  exit "${2:-1}"
+}
+
+import_linux_desktop_environment() {
+  [[ "$PLATFORM" == "Linux" && "$HEADLESS" == "0" ]] || return 0
+  [[ -n "${DISPLAY:-}" ]] && return 0
+
+  local pid key value
+  for pid in $(/usr/bin/pgrep -u "$(id -u)" -x gnome-shell 2>/dev/null || true) \
+             $(/usr/bin/pgrep -u "$(id -u)" -f '/gnome-session-binary' 2>/dev/null || true); do
+    [[ -r "/proc/$pid/environ" ]] || continue
+    for key in DISPLAY XAUTHORITY DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR WAYLAND_DISPLAY; do
+      value="$(/usr/bin/tr '\0' '\n' < "/proc/$pid/environ" | /usr/bin/sed -n "s/^${key}=//p" | /usr/bin/head -n 1)"
+      [[ -z "$value" ]] || export "$key=$value"
+    done
+    [[ -n "${DISPLAY:-}" ]] && return 0
+  done
+
+  fail_launcher "Visible dedicated Chrome requires a real desktop session owned by runtime user $(id -un); DISPLAY is unavailable" 23
+}
+
+CHROME_APP="${INFOOS_CHROME_APP:-}"
+CHROME_BIN="${INFOOS_CHROME_BIN:-}"
+CHROME_PROCESS_BIN=""
+if [[ "$PLATFORM" == "Darwin" ]]; then
+  if [[ -z "$CHROME_APP" ]]; then
+    CHROME_APP="/Applications/Google Chrome.app"
+  fi
+  if [[ ! -d "$CHROME_APP" ]]; then
+    printf '%s\n' "Google Chrome app is required at $CHROME_APP" >> "$LOG_DIR/chrome-open.err.log"
+    exit 1
+  fi
+  CHROME_BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$CHROME_APP/Contents/Info.plist" 2>/dev/null || true)"
+  if [[ "$CHROME_BUNDLE_ID" != "com.google.Chrome" ]]; then
+    printf '%s\n' "Stable Google Chrome is required; refusing bundle $CHROME_APP ($CHROME_BUNDLE_ID)" >> "$LOG_DIR/chrome-open.err.log"
+    exit 1
+  fi
+  CHROME_BIN="${CHROME_BIN:-$CHROME_APP/Contents/MacOS/Google Chrome}"
+  CHROME_PROCESS_BIN="$CHROME_BIN"
+elif [[ "$PLATFORM" == "Linux" ]]; then
+  if [[ -z "$CHROME_BIN" ]]; then
+    for _chrome in /usr/bin/google-chrome-stable /usr/bin/google-chrome; do
+      if [[ -x "$_chrome" ]]; then
+        CHROME_BIN="$_chrome"
+        break
+      fi
+    done
+  fi
+  if [[ -n "$CHROME_BIN" ]]; then
+    CHROME_BIN="$(readlink -f "$CHROME_BIN" 2>/dev/null || printf '%s' "$CHROME_BIN")"
+  fi
+  CHROME_PROCESS_BIN="$(dirname "$CHROME_BIN")/chrome"
+else
+  printf '%s\n' "Unsupported Chrome platform: $PLATFORM" >> "$LOG_DIR/chrome-open.err.log"
+  exit 1
+fi
+if [[ -z "$CHROME_BIN" || ! -x "$CHROME_BIN" ]]; then
+  printf '%s\n' "Google Chrome executable is missing: ${CHROME_BIN:-not configured}" >> "$LOG_DIR/chrome-open.err.log"
+  exit 1
+fi
+if [[ "$PLATFORM" == "Linux" ]]; then
+  CHROME_VERSION="$("$CHROME_BIN" --version 2>/dev/null | /usr/bin/sed -e 's/[[:space:]]*$//')"
+  if [[ ! "$CHROME_VERSION" =~ ^Google\ Chrome\ [0-9]+(\.[0-9]+){3}$ ]]; then
+    printf '%s\n' "Stable Google Chrome is required; refusing executable $CHROME_BIN" >> "$LOG_DIR/chrome-open.err.log"
+    exit 1
+  fi
+fi
+OPENCLI_BIN="${INFOOS_OPENCLI_EXECUTABLE:-}"
+if [[ -z "$OPENCLI_BIN" && -x "$MANAGED_OPENCLI_BIN" ]]; then
+  OPENCLI_BIN="$MANAGED_OPENCLI_BIN"
+fi
+if [[ -z "$OPENCLI_BIN" ]]; then
+  for _c in \
+    "$HOME/.nvm/versions/node/v24.15.0/bin/opencli" \
+    "$HOME/.nvm/current/bin/opencli" \
+    "/opt/homebrew/bin/opencli" \
+    "/usr/bin/opencli" \
+    "/usr/local/bin/opencli"; do
+    if [[ -x "$_c" ]]; then
+      OPENCLI_BIN="$_c"
+      break
+    fi
+  done
+fi
+if [[ -z "$OPENCLI_BIN" ]]; then
+  OPENCLI_BIN="$(/usr/bin/which opencli 2>/dev/null || true)"
+fi
+if [[ "$LAUNCH_ONLY" == "0" && ! -f "$BINDING_HELPER" ]]; then
+  printf '%s\n' "InfoOS browser binding helper is missing: $BINDING_HELPER" >> "$LOG_DIR/chrome-open.err.log"
+  exit 1
+fi
+
+import_linux_desktop_environment
+
+ensure_opencli_daemon() {
+  # Before launching Chrome, make sure the OpenCLI daemon is alive —
+  # otherwise the Browser Bridge extension has nothing to attach to.
+  if [[ -z "$OPENCLI_BIN" ]]; then
+    return 0
+  fi
+  local daemon_status
+  daemon_status="$("$OPENCLI_BIN" daemon status 2>&1 || true)"
+  if [[ "$daemon_status" == *"Daemon: running"* && "$daemon_status" != *"not running"* ]]; then
+    return 0  # daemon already alive
+  fi
+  "$OPENCLI_BIN" daemon restart >> "$LOG_DIR/daemon.out.log" 2>> "$LOG_DIR/daemon.err.log" || true
+}
+
+profile_is_empty() {
+  # Profile is "empty" (first-time install) when the directory either
+  # doesn't exist or contains no Chrome profile markers. Cookies,
+  # History, and Preferences are written by Chrome within the first
+  # few seconds of a session — if none of them exist the profile is
+  # effectively fresh and we should start from scratch.
+  [[ ! -d "$PROFILE_DIR" ]] && return 0
+  [[ ! -d "$PROFILE_DIR/Default" ]] && return 0
+  [[ ! -f "$PROFILE_DIR/Default/Cookies" ]] && return 0
+  [[ ! -f "$PROFILE_DIR/Default/History" ]] && return 0
+  [[ ! -f "$PROFILE_DIR/Default/Preferences" ]] && return 0
+  return 1
+}
+
+profile_pattern() {
+  printf -- "--user-data-dir=%s\n" "$PROFILE_DIR"
+}
+
+profile_candidate_pids() {
+  /usr/bin/pgrep -u "$(id -u)" -f -- "$(profile_pattern)" 2>/dev/null || true
+}
+
+pid_namespace_matches_current() {
+  local pid="$1"
+  [[ "$PLATFORM" != "Linux" ]] && return 0
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+
+  local current_namespace candidate_namespace
+  current_namespace="$(/usr/bin/readlink /proc/self/ns/pid 2>/dev/null || true)"
+  candidate_namespace="$(/usr/bin/readlink "/proc/$pid/ns/pid" 2>/dev/null || true)"
+  [[ -n "$current_namespace" && "$current_namespace" == "$candidate_namespace" ]]
+}
+
+is_infoos_chrome_main_pid() {
+  local pid="$1"
+  local command_line
+  pid_namespace_matches_current "$pid" || return 1
+  command_line="$(/bin/ps -p "$pid" -o command= 2>/dev/null || true)"
+  [[ -n "$command_line" ]] || return 1
+  [[ "$command_line" == *"--user-data-dir=$PROFILE_DIR"* ]] || return 1
+  [[ "$command_line" != *" -lc "* ]] || return 1
+  [[ "$command_line" != *" -c "* ]] || return 1
+  [[ "$command_line" != *"/Helpers/"* ]] || return 1
+  [[ "$command_line" != *"--type="* ]] || return 1
+  case "$command_line" in
+    "$CHROME_BIN"|"$CHROME_BIN "*|"$CHROME_PROCESS_BIN"|"$CHROME_PROCESS_BIN "*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+infoos_chrome_pids() {
+  local pid
+  profile_candidate_pids | while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    if is_infoos_chrome_main_pid "$pid"; then
+      printf '%s\n' "$pid"
+    fi
+  done
+}
+
+first_infoos_chrome_pid() {
+  infoos_chrome_pids | /usr/bin/head -n 1
+}
+
+infoos_chrome_running() {
+  [[ -n "$(infoos_chrome_pids)" ]]
+}
+
+infoos_chrome_headless() {
+  local pid command_line
+  pid="$(first_infoos_chrome_pid)"
+  [[ -n "$pid" ]] || return 1
+  command_line="$(/bin/ps -p "$pid" -o command= 2>/dev/null || true)"
+  [[ "$command_line" == *"--headless"* ]]
+}
+
+infoos_chrome_mode_matches() {
+  if [[ "$HEADLESS" == "1" ]]; then
+    infoos_chrome_headless
+  else
+    ! infoos_chrome_headless
+  fi
+}
+
+kill_infoos_chrome() {
+  local pids remaining
+  pids="$(infoos_chrome_pids)"
+  [[ -n "$pids" ]] || return 0
+  printf '%s\n' "$pids" | /usr/bin/xargs kill -TERM >/dev/null 2>&1 || true
+  for _attempt in 1 2 3 4 5; do
+    /bin/sleep 1
+    remaining="$(infoos_chrome_pids)"
+    [[ -z "$remaining" ]] && return 0
+  done
+  printf '%s\n' "$remaining" | /usr/bin/xargs kill -KILL >/dev/null 2>&1 || true
+  /bin/sleep 1
+}
+
+gracefully_stop_infoos_chrome() {
+  local pids remaining
+  pids="$(infoos_chrome_pids)"
+  [[ -n "$pids" ]] || return 1
+  printf '%s\n' "$pids" | /usr/bin/xargs kill -TERM >/dev/null 2>&1 || return 1
+  for _attempt in $(seq 1 20); do
+    /bin/sleep 1
+    remaining="$(infoos_chrome_pids)"
+    [[ -z "$remaining" ]] && return 0
+  done
+  printf '%s\n' "Dedicated Chrome did not exit gracefully; persistence check will not force termination" >> "$LOG_DIR/chrome-open.err.log"
+  return 1
+}
+
+focus_infoos_chrome() {
+  local pid="$1"
+  if [[ "$PLATFORM" == "Darwin" ]]; then
+    /usr/bin/osascript <<OSA >/dev/null 2>&1 || true
+tell application "System Events"
+  set frontmost of first process whose unix id is $pid to true
+end tell
+OSA
+    return 0
+  fi
+  if command -v wmctrl >/dev/null 2>&1; then
+    local window_id
+    window_id="$(wmctrl -lp 2>/dev/null | awk -v pid="$pid" '$3 == pid {print $1; exit}')"
+    [[ -z "$window_id" ]] || wmctrl -ia "$window_id" >/dev/null 2>&1 || true
+  fi
+}
+
+open_infoos_chrome_url() {
+  local start_url="$1"
+  local chrome_args=(
+    --user-data-dir="$PROFILE_DIR"
+    --profile-directory="Default"
+    --no-first-run
+  )
+  if [[ "$PLATFORM" == "Linux" ]]; then
+    chrome_args+=(--new-tab)
+  fi
+  chrome_args+=("$start_url")
+  if [[ "$PLATFORM" == "Darwin" ]]; then
+    /usr/bin/open -na "$CHROME_APP" --args "${chrome_args[@]}" \
+      >> "$LOG_DIR/chrome-open.out.log" \
+      2>> "$LOG_DIR/chrome-open.err.log"
+  else
+    "$CHROME_BIN" "${chrome_args[@]}" \
+      >> "$LOG_DIR/chrome-open.out.log" \
+      2>> "$LOG_DIR/chrome-open.err.log"
+  fi
+}
+
+connected_contexts() {
+  "$PYTHON_BIN" "$BINDING_HELPER" contexts --opencli "$OPENCLI_BIN" 2>/dev/null || true
+}
+
+wait_for_context_set_change() {
+  local before="$1"
+  local elapsed=0
+  while (( elapsed < 20 )); do
+    if [[ "$(connected_contexts)" != "$before" ]]; then
+      return 0
+    fi
+    /bin/sleep 1
+    elapsed=$((elapsed + 1))
+  done
+  return 1
+}
+
+binding_is_live() {
+  local check_args=(check \
+    --opencli "$OPENCLI_BIN" \
+    --session-json "$JSON_PATH" \
+    --profile-dir "$PROFILE_DIR" \
+    --chrome-bin "$CHROME_BIN" \
+    --activate)
+  if [[ "$HEADLESS" == "1" ]]; then
+    check_args+=(--allow-headless)
+  fi
+  "$PYTHON_BIN" "$BINDING_HELPER" "${check_args[@]}" >/dev/null 2>&1
+}
+
+bind_opencli_profile_once() {
+  local baseline_contexts="$1"
+  local chrome_pid="$2"
+  local allow_reconnected="$3"
+  local elapsed context_id
+  local select_args
+  elapsed=0
+  while (( elapsed < 30 )); do
+    select_args=(select-new --opencli "$OPENCLI_BIN" --baseline "$baseline_contexts")
+    if [[ "$allow_reconnected" == "1" ]]; then
+      select_args+=(--allow-reconnected)
+    fi
+    context_id="$("$PYTHON_BIN" "$BINDING_HELPER" "${select_args[@]}" 2>/dev/null || true)"
+    if [[ -n "$context_id" ]]; then
+      break
+    fi
+    /bin/sleep 1
+    elapsed=$((elapsed + 1))
+  done
+  [[ -n "$context_id" && "$context_id" != "No" ]] || return 1
+  "$OPENCLI_BIN" profile rename "$context_id" "$EXPECTED_ALIAS" >/dev/null 2>&1 || return 1
+  "$OPENCLI_BIN" profile use "$context_id" >/dev/null 2>&1 || return 1
+  write_session_binding "$context_id" "$chrome_pid" "new_context_after_dedicated_launch" || return 1
+  printf '%s\n' "Bound OpenCLI profile $context_id as $EXPECTED_ALIAS" >> "$LOG_DIR/chrome-open.out.log"
+}
+
+write_session_binding() {
+  local context_id="$1"
+  local chrome_pid="$2"
+  local binding_proof="$3"
+  local now_iso
+  now_iso="$(/bin/date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  local session_tmp_path="${JSON_PATH}.tmp.$$"
+  if ! /bin/cat > "$session_tmp_path" <<JSON
+{
+  "schema_version": 2,
+  "profile_dir": "$PROFILE_DIR",
+  "context_id": "$context_id",
+  "alias": "infoos-fetch",
+  "chrome_pid": $chrome_pid,
+  "binding_proof": "$binding_proof",
+  "started_at": "$now_iso",
+  "last_health_at": "$now_iso",
+  "last_health_status": "ready"
+}
+JSON
+  then
+    /bin/rm -f "$session_tmp_path"
+    return 1
+  fi
+  /bin/chmod 600 "$session_tmp_path" || {
+    /bin/rm -f "$session_tmp_path"
+    return 1
+  }
+  /bin/mv -f "$session_tmp_path" "$JSON_PATH" || {
+    /bin/rm -f "$session_tmp_path"
+    return 1
+  }
+}
+
+bind_opencli_profile() {
+  local baseline_contexts="$1"
+  local chrome_pid="$2"
+  local allow_reconnected="$3"
+  [[ -n "$OPENCLI_BIN" ]] || return 1
+  if command -v flock >/dev/null 2>&1; then
+    (
+      flock -x -w 30 9 || return 1
+      bind_opencli_profile_once "$baseline_contexts" "$chrome_pid" "$allow_reconnected"
+    ) 9> "$LOCK_PATH"
+  else
+    bind_opencli_profile_once "$baseline_contexts" "$chrome_pid" "$allow_reconnected"
+  fi
+}
+
+bind_supervised_container_profile() {
+  if [[ "$PLATFORM" != "Linux" || "$BROWSER_RUNTIME" != "supervised-container" ]]; then
+    fail_launcher "Supervised-container binding requires Linux and INFOOS_BROWSER_RUNTIME=supervised-container" 29
+  fi
+  if [[ -z "$OPENCLI_BIN" || ! -x "$OPENCLI_BIN" ]]; then
+    fail_launcher "Supervised-container binding requires the managed OpenCLI executable" 30
+  fi
+
+  local chrome_pids=()
+  local pid context_id
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] || chrome_pids+=("$pid")
+  done < <(infoos_chrome_pids)
+  if [[ "${#chrome_pids[@]}" != "1" ]]; then
+    fail_launcher "Supervised-container binding requires exactly one dedicated Chrome main process; found ${#chrome_pids[@]}" 31
+  fi
+
+  context_id="$("$PYTHON_BIN" "$BINDING_HELPER" select-single --opencli "$OPENCLI_BIN" 2>/dev/null)" || {
+    fail_launcher "Supervised-container binding requires exactly one connected OpenCLI context" 32
+  }
+  [[ -n "$context_id" ]] || fail_launcher "Supervised-container OpenCLI context is missing" 32
+  "$OPENCLI_BIN" profile rename "$context_id" "$EXPECTED_ALIAS" >/dev/null 2>&1 || {
+    fail_launcher "Could not rename the supervised-container OpenCLI context" 33
+  }
+  "$OPENCLI_BIN" profile use "$context_id" >/dev/null 2>&1 || {
+    fail_launcher "Could not activate the supervised-container OpenCLI context" 34
+  }
+  write_session_binding \
+    "$context_id" \
+    "${chrome_pids[0]}" \
+    "supervised_container_dedicated_profile" || {
+      fail_launcher "Could not persist supervised-container browser binding" 35
+    }
+  binding_is_live || fail_launcher "Supervised-container binding failed runtime verification" 36
+  printf '%s\n' "Bound supervised-container OpenCLI profile $context_id as $EXPECTED_ALIAS" >> "$LOG_DIR/chrome-open.out.log"
+}
+
+restart_supervised_container_profile() {
+  if [[ "$PLATFORM" != "Linux" || "$BROWSER_RUNTIME" != "supervised-container" ]]; then
+    fail_launcher "Supervised-container persistence restart requires the supervised Linux runtime" 38
+  fi
+  if ! infoos_chrome_running || ! binding_is_live; then
+    fail_launcher "Persistence check requires an existing verified dedicated Chrome binding" 25
+  fi
+
+  local previous_chrome_pid current_chrome_pid context_id
+  local chrome_pids=()
+  previous_chrome_pid="$(first_infoos_chrome_pid)"
+  kill -TERM "$previous_chrome_pid" >/dev/null 2>&1 || {
+    fail_launcher "Dedicated Chrome failed to begin graceful exit" 26
+  }
+
+  current_chrome_pid=""
+  context_id=""
+  for _attempt in $(seq 1 60); do
+    chrome_pids=()
+    while IFS= read -r current_chrome_pid; do
+      [[ -z "$current_chrome_pid" ]] || chrome_pids+=("$current_chrome_pid")
+    done < <(infoos_chrome_pids)
+    if [[ "${#chrome_pids[@]}" == "1" ]]; then
+      current_chrome_pid="${chrome_pids[0]}"
+      if [[ "$current_chrome_pid" != "$previous_chrome_pid" ]]; then
+        context_id="$("$PYTHON_BIN" "$BINDING_HELPER" select-single --opencli "$OPENCLI_BIN" 2>/dev/null || true)"
+        [[ -z "$context_id" ]] || break
+      fi
+    fi
+    current_chrome_pid=""
+    /bin/sleep 0.5
+  done
+  if [[ -z "$current_chrome_pid" || "$current_chrome_pid" == "$previous_chrome_pid" ]]; then
+    fail_launcher "Dedicated Chrome supervisor did not produce a new process" 39
+  fi
+  [[ -n "$context_id" ]] || fail_launcher "OpenCLI context did not reconnect after Chrome restart" 40
+
+  bind_supervised_container_profile
+}
+
+if [[ "$PERSISTENCE_CHECK" == "1" && "$BROWSER_RUNTIME" == "supervised-container" ]]; then
+  restart_supervised_container_profile
+  exit 0
+fi
+
+if [[ "$SUPERVISED_CONTAINER_BIND" == "1" ]]; then
+  bind_supervised_container_profile
+  exit 0
+fi
+
+BASELINE_CONTEXTS=""
+if [[ "$LAUNCH_ONLY" == "0" ]]; then
+  BASELINE_CONTEXTS="$(connected_contexts)"
+fi
+if [[ "$PERSISTENCE_CHECK" == "1" ]]; then
+  if ! infoos_chrome_running || ! binding_is_live; then
+    fail_launcher "Persistence check requires an existing verified dedicated Chrome binding" 25
+  fi
+  PREVIOUS_CHROME_PID="$(first_infoos_chrome_pid)"
+  gracefully_stop_infoos_chrome || fail_launcher "Dedicated Chrome failed to exit gracefully" 26
+  wait_for_context_set_change "$BASELINE_CONTEXTS" || fail_launcher "Dedicated Chrome context did not disconnect after graceful exit" 27
+  RECONNECTED_CONTEXT_ALLOWED=1
+  BASELINE_CONTEXTS="$(connected_contexts)"
+fi
+if infoos_chrome_running; then
+  if [[ "$LAUNCH_ONLY" == "1" && "$RESTART" == "0" ]] && infoos_chrome_mode_matches; then
+    INFOOS_CHROME_PID="$(first_infoos_chrome_pid)"
+    open_infoos_chrome_url "$START_URL" || fail_launcher "Could not open the requested URL in dedicated Chrome" 37
+    focus_infoos_chrome "$INFOOS_CHROME_PID"
+    exit 0
+  elif profile_is_empty; then
+    # Profile exists on disk but is empty AND Chrome is already running
+    # under some other user-data-dir (typically the user's daily browser).
+    # The current Chrome process is NOT ours — kill it and start fresh
+    # under the dedicated InfoOS userdir.
+    printf '%s\n' "InfoOS Chrome already running under a different user-data-dir; restarting under $PROFILE_DIR" >> "$LOG_DIR/chrome-open.out.log"
+    kill_infoos_chrome
+  elif [[ "$RESTART" == "1" ]] || ! infoos_chrome_mode_matches; then
+    printf '%s\n' "InfoOS Chrome runtime mode changed; restarting the dedicated profile" >> "$LOG_DIR/chrome-open.out.log"
+    kill_infoos_chrome
+  else
+    INFOOS_CHROME_PID="$(first_infoos_chrome_pid)"
+    if [[ -n "$INFOOS_CHROME_PID" ]] && binding_is_live; then
+      printf '%s\n' "Reusing verified InfoOS Chrome binding: $PROFILE_DIR" >> "$LOG_DIR/chrome-open.out.log"
+      focus_infoos_chrome "$INFOOS_CHROME_PID"
+      exit 0
+    fi
+    printf '%s\n' "Existing InfoOS Chrome binding is unproven; restarting to establish a dedicated context" >> "$LOG_DIR/chrome-open.out.log"
+    kill_infoos_chrome
+  fi
+  if [[ -n "$BASELINE_CONTEXTS" ]]; then
+    wait_for_context_set_change "$BASELINE_CONTEXTS" || {
+      printf '%s\n' "Dedicated Chrome context did not disconnect before restart" >> "$LOG_DIR/chrome-open.err.log"
+      exit 1
+    }
+    RECONNECTED_CONTEXT_ALLOWED=1
+  fi
+  BASELINE_CONTEXTS="$(connected_contexts)"
+fi
+
+# The setup/login button only opens the visible dedicated profile. Binding is
+# intentionally deferred until the extension is installed and explicitly
+# verified. Runtime fetch preparation still uses the full binding path.
+if [[ "$LAUNCH_ONLY" == "0" ]]; then
+  ensure_opencli_daemon
+fi
+
+printf '%s\n' "Launching InfoOS Chrome profile: $PROFILE_DIR -> $START_URL" >> "$LOG_DIR/chrome-open.out.log"
+
+chrome_args=(
+  --user-data-dir="$PROFILE_DIR"
+  --profile-directory="Default"
+  --no-first-run
+)
+if [[ "$HEADLESS" == "1" ]]; then
+  chrome_args+=(--headless=new)
+fi
+chrome_args+=("$START_URL")
+
+if [[ "$PLATFORM" == "Darwin" ]]; then
+  /usr/bin/open -na "$CHROME_APP" --args "${chrome_args[@]}" \
+    >> "$LOG_DIR/chrome-open.out.log" \
+    2>> "$LOG_DIR/chrome-open.err.log" &
+else
+  "$CHROME_BIN" "${chrome_args[@]}" \
+    >> "$LOG_DIR/chrome-open.out.log" \
+    2>> "$LOG_DIR/chrome-open.err.log" &
+fi
+
+INFOOS_CHROME_PID=""
+for _attempt in $(seq 1 40); do
+  INFOOS_CHROME_PID="$(first_infoos_chrome_pid)"
+  [[ -n "$INFOOS_CHROME_PID" ]] && break
+  /bin/sleep 0.25
+done
+if [[ -n "$INFOOS_CHROME_PID" ]]; then
+  focus_infoos_chrome "$INFOOS_CHROME_PID"
+fi
+if [[ -z "$INFOOS_CHROME_PID" ]]; then
+  fail_launcher "Dedicated Chrome did not start; check the runtime user's desktop session and $LOG_DIR/chrome-open.err.log" 24
+fi
+if [[ "$PERSISTENCE_CHECK" == "1" && "$INFOOS_CHROME_PID" == "$PREVIOUS_CHROME_PID" ]]; then
+  fail_launcher "Dedicated Chrome persistence restart did not produce a new process" 28
+fi
+if [[ "$LAUNCH_ONLY" == "1" ]]; then
+  exit 0
+fi
+bind_opencli_profile "$BASELINE_CONTEXTS" "$INFOOS_CHROME_PID" "$RECONNECTED_CONTEXT_ALLOWED" || {
+  printf '%s\n' "Could not bind OpenCLI profile for InfoOS Chrome session; install or enable Web Store extension $OPENCLI_WEBSTORE_EXTENSION_ID in the dedicated profile" >> "$LOG_DIR/chrome-open.err.log"
+  exit 1
+}
+binding_is_live || {
+  printf '%s\n' "Dedicated Chrome binding failed runtime verification" >> "$LOG_DIR/chrome-open.err.log"
+  exit 1
+}

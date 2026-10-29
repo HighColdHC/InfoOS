@@ -1,0 +1,52 @@
+# Authelia 4.39 configuration example; replace example.com.
+# Supply independent secrets using the documented *_FILE environment variables.
+server:
+  address: tcp://127.0.0.1:9091/
+  endpoints:
+    authz:
+      auth-request:
+        implementation: AuthRequest
+log:
+  level: info
+identity_validation:
+  reset_password: {}
+totp:
+  issuer: InfoOS
+  period: 30
+  skew: 1
+authentication_backend:
+  file:
+    path: /etc/authelia/users.yml
+access_control:
+  default_policy: deny
+  rules:
+    # Machine APIs authenticate in FastAPI; keep the slash boundary exact.
+    - domain: infoos.example.com
+      resources:
+        - '^/mcp(?:/|$)'
+        - '^/api/plugin/v1(?:/|$)'
+        - '^/api/capture/v1/'
+      policy: bypass
+    - domain: infoos.example.com
+      policy: two_factor
+session:
+  name: authelia_session
+  cookies:
+    - domain: example.com
+      authelia_url: https://auth.example.com
+      default_redirection_url: https://infoos.example.com
+  expiration: 1h
+  inactivity: 15m
+  remember_me: -1
+regulation:
+  max_retries: 5
+  find_time: 2m
+  ban_time: 5m
+storage:
+  local:
+    path: /var/lib/authelia/db.sqlite3
+# Local enrollment notifications are sensitive. Protect this directory/file;
+# configure your own SMTP notifier instead if remote enrollment is required.
+notifier:
+  filesystem:
+    filename: /var/lib/authelia/notifications.txt

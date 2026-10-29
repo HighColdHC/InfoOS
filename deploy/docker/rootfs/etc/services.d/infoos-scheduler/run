@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+
+exec /opt/infoos/bin/infoos-run-service infoos-scheduler /opt/infoos/bin/infoos-scheduler-loop

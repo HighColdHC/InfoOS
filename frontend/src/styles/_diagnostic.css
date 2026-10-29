@@ -1,0 +1,19 @@
+/* Diagnostic — diagnostic summary, browser session, quality summary, expand link. */
+
+.expand-link {
+  border: 0;
+  background: transparent;
+  color: var(--color-accent);
+  font-family: var(--font-body);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.expand-link:hover { color: var(--color-accent-hover); }
+
+.collector-shell .expand-link, .modal-card .expand-link { min-height: 36px; }
+.collector-shell .expand-link:focus-visible, .modal-card .expand-link:focus-visible { outline: 3px solid var(--color-accent-ring); outline-offset: 2px; border-radius: var(--radius-xs); }

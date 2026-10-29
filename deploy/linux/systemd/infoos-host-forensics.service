@@ -1,0 +1,17 @@
+[Unit]
+Description=Classify InfoOS host boots and preserve abnormal-termination evidence
+After=local-fs.target systemd-journald.service rasdaemon.service infoos-hardware-watchdog.service
+Wants=rasdaemon.service
+Before=infoos-host-monitor.service shutdown.target reboot.target halt.target
+
+[Service]
+Type=oneshot
+ExecStartPre=/usr/sbin/sysctl -w kernel.nmi_watchdog=1
+ExecStart=/usr/local/sbin/infoos-host-monitor boot-check
+RemainAfterExit=yes
+ExecStop=/usr/local/sbin/infoos-host-monitor mark-clean-shutdown --only-if-stopping
+TimeoutStartSec=180
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

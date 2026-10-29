@@ -1,0 +1,12 @@
+{
+  "id": 423045861,
+  "name": "Example release",
+  "tag_name": "v1.0.0",
+  "html_url": "https://github.com/example/project/releases/tag/v1.0.0",
+  "body": "## Security fixes\n\nv2.1.0 fixes eight vulnerabilities in three servers. Upgrade\n`@modelcontextprotocol/server-filesystem` and `@modelcontextprotocol/server-everything`\nto 2.0.1, and `mcp-server-fetch` to 2026.10.24.\n\n| Package | Affected | Fixed in |\n| --- | --- | --- |",
+  "published_at": "2026-10-25T00:03:20Z",
+  "author": {
+    "login": "example",
+    "html_url": "https://github.com/example"
+  }
+}

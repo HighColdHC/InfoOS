@@ -1,0 +1,13 @@
+{
+  "id": 2672330843,
+  "title": "Example pull_request",
+  "html_url": "https://github.com/example/project/pull/2",
+  "body": "These are now available on npm as individual packages:\r\n<img width=\"427\" alt=\"image\" src=\"https://example.com/image.png\">\r\nOr you can `npm install @modelcontextprotocol/servers` to get all of them at once.\r\n\r\n# Depends on\r\n\r\n* #1 ",
+  "body_html": "<p dir=\"auto\">These are now available on npm as individual packages:<br>\n<a target=\"_blank\" rel=\"noopener noreferrer\" href=\"https://example.com/image.png\"><img width=\"427\" alt=\"image\" src=\"https://example.com/image.png\" style=\"max-width: 100%;\"></a><br>\nOr you can <code class=\"notranslate\">npm install @modelcontextprotocol/servers</code> to get all of them at once.</p>\n<h1 dir=\"auto\">Depends on</h1>\n<ul dir=\"auto\">\n<li><a class=\"issue-link js-issue-link\" data-error-text=\"Failed to load title\" data-id=\"2672228057\" data-permission-text=\"Title is private\" data-url=\"https://github.com/modelcontextprotocol/servers/issues/1\" data-hovercard-type=\"pull_request\" data-hovercard-url=\"/modelcontextprotocol/servers/pull/1/hovercard\" href=\"https://github.com/modelcontextprotocol/servers/pull/1\">#1</a></li>\n</ul>",
+  "user": {
+    "login": "example",
+    "html_url": "https://github.com/example"
+  },
+  "created_at": "2024-11-19T14:18:17Z",
+  "updated_at": "2026-06-07T13:05:18Z"
+}

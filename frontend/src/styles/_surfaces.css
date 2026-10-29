@@ -1,0 +1,356 @@
+/* Management surfaces — one visual language for every console page.
+ *
+ * Module stylesheets keep layout; this file owns the look of panels,
+ * tables, filter bars, status pills and section headings. Selectors are
+ * scoped to the shell (or the modal card) so they win over the lazily
+ * loaded module sheets without !important.
+ */
+
+/* ===== Section headings ===== */
+.collector-shell :is(.collector-source-heading, .collector-task-heading, .collector-token-heading, .collector-export-heading, .collector-environment-heading, .research-heading) h2,
+.collector-shell :is(.collector-environment-section-title, .collector-logs-title) h2,
+.collector-shell .collector-task-queues h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.02em;
+}
+.collector-shell :is(.collector-source-heading, .collector-task-heading, .collector-token-heading, .collector-export-heading, .collector-environment-heading, .collector-environment-section-title, .collector-logs-title, .research-heading) p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* ===== Panels ===== */
+.collector-shell :is(
+  .collector-source-panel, .collector-task-panel, .collector-logs-panel,
+  .collector-environment-components, .collector-environment-accounts, .collector-environment-runtime,
+  .collector-task-queues, .research-panel, .research-detail, .collector-token-overview,
+  .collector-token-table-wrap, .collector-request-table-wrap, .collector-task-queue-tracking
+) {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--color-hairline);
+}
+.collector-shell :is(.collector-environment-components, .collector-environment-accounts, .collector-task-queues, .research-panel, .research-detail, .collector-task-queue-tracking) { padding: 18px 20px; }
+.collector-shell .collector-environment-runtime { padding: 16px 20px; }
+[data-theme="dark"] .collector-shell :is(
+  .collector-source-panel, .collector-task-panel, .collector-logs-panel,
+  .collector-environment-components, .collector-environment-accounts, .collector-environment-runtime,
+  .collector-task-queues, .research-panel, .research-detail, .collector-token-overview,
+  .collector-token-table-wrap, .collector-request-table-wrap, .collector-task-queue-tracking
+) { background: color-mix(in srgb, var(--color-surface) 80%, transparent); }
+
+/* Tiles inside panels */
+.collector-shell :is(.collector-environment-component, .collector-environment-circuit, .research-detail-summary div, .research-platform-runs article, .research-coverage li, .research-recent li, .research-cards li, .collector-task-queues li, .research-platform-options > div) {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-soft);
+  transition: var(--transition-interactive);
+}
+.collector-shell :is(.collector-environment-component, .collector-task-queues li, .research-recent li):hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+/* ===== Metric cards ===== */
+.collector-shell :is(.metric-card, .collector-task-metrics article) {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--color-hairline);
+  transition: transform 500ms var(--ease-out), box-shadow 500ms var(--ease-out), border-color var(--transition-normal);
+}
+.collector-shell :is(.metric-card, .collector-task-metrics article)::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  right: -40px;
+  top: -40px;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--metric-tone, var(--aurora-1)) 18%, transparent), transparent 70%);
+  transition: transform 700ms var(--ease-out);
+}
+.collector-shell :is(.metric-card, .collector-task-metrics article):hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); border-color: var(--color-border); }
+.collector-shell :is(.metric-card, .collector-task-metrics article):hover::after { transform: scale(1.35); }
+.collector-shell :is(.metric-grid, .collector-task-metrics) > :nth-child(2) { --metric-tone: var(--aurora-3); }
+.collector-shell :is(.metric-grid, .collector-task-metrics) > :nth-child(3) { --metric-tone: var(--color-warning); }
+.collector-shell :is(.metric-grid, .collector-task-metrics) > :nth-child(4) { --metric-tone: var(--aurora-4); }
+.collector-shell .collector-task-metrics article { min-height: 104px; padding: 18px 20px; gap: 10px; align-content: space-between; }
+.collector-shell .collector-task-metrics span { color: var(--color-text-muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
+.collector-shell .collector-task-metrics strong { font-family: var(--font-heading); font-size: 32px; font-weight: var(--font-weight-bold); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.collector-shell :is(.collector-task-metrics, .metric-grid) > * { animation: rise-in var(--duration-slow) var(--ease-out) backwards; }
+.collector-shell :is(.collector-task-metrics, .metric-grid) > :nth-child(2) { animation-delay: calc(var(--motion-stagger-step) * 2); }
+.collector-shell :is(.collector-task-metrics, .metric-grid) > :nth-child(3) { animation-delay: calc(var(--motion-stagger-step) * 3); }
+.collector-shell :is(.collector-task-metrics, .metric-grid) > :nth-child(4) { animation-delay: calc(var(--motion-stagger-step) * 4); }
+
+/* ===== Tables ===== */
+.collector-shell :is(.collector-source-table, .collector-task-table, .collector-log-table, .collector-token-table, .collector-request-table, .collector-environment-table, .collector-task-queue-tracking table) {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--font-size-sm);
+}
+.collector-shell :is(.collector-source-table, .collector-task-table, .collector-log-table, .collector-token-table, .collector-request-table, .collector-environment-table, .collector-task-queue-tracking table) th {
+  height: 40px;
+  padding: 0 14px;
+  border-top: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: color-mix(in srgb, var(--color-surface-soft) 85%, transparent);
+  color: var(--color-text-subtle);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.collector-shell :is(.collector-source-table, .collector-task-table, .collector-log-table, .collector-token-table, .collector-request-table, .collector-environment-table, .collector-task-queue-tracking table) td {
+  padding: 14px;
+  border-top: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  transition: background var(--transition-fast);
+}
+.collector-shell :is(.collector-source-table, .collector-task-table, .collector-log-table, .collector-token-table, .collector-request-table, .collector-environment-table, .collector-task-queue-tracking table) tbody tr:last-child td { border-bottom: 0; }
+.collector-shell :is(.collector-source-table, .collector-task-table, .collector-log-table, .collector-token-table, .collector-request-table, .collector-environment-table, .collector-task-queue-tracking table) tbody tr:hover td {
+  background: color-mix(in srgb, var(--color-accent) 4%, transparent);
+}
+.collector-shell :is(.collector-source-table, .collector-task-table, .collector-log-table, .collector-token-table, .collector-request-table, .collector-environment-table) tbody tr { animation: fade-in 420ms var(--ease-out) both; }
+.collector-shell :is(.collector-source-table, .collector-task-table, .collector-log-table, .collector-token-table, .collector-request-table, .collector-environment-table) tbody tr:nth-child(2) { animation-delay: var(--motion-stagger-step); }
+.collector-shell :is(.collector-source-table, .collector-task-table, .collector-log-table, .collector-token-table, .collector-request-table, .collector-environment-table) tbody tr:nth-child(3) { animation-delay: calc(var(--motion-stagger-step) * 2); }
+.collector-shell :is(.collector-source-table, .collector-task-table, .collector-log-table, .collector-token-table, .collector-request-table, .collector-environment-table) tbody tr:nth-child(4) { animation-delay: calc(var(--motion-stagger-step) * 2); }
+.collector-shell :is(.collector-source-table, .collector-task-table, .collector-log-table, .collector-token-table, .collector-request-table, .collector-environment-table) tbody tr:nth-child(n+5) { animation-delay: calc(var(--motion-stagger-step) * 3); }
+.collector-shell :is(.collector-source-table, .collector-task-table, .collector-log-table, .collector-token-table, .collector-request-table, .collector-environment-table) :is(td strong, td > strong) { color: var(--color-text); font-weight: var(--font-weight-semibold); }
+.collector-shell :is(.collector-source-table, .collector-task-table, .collector-log-table, .collector-token-table, .collector-request-table, .collector-environment-table) code { color: var(--color-text-subtle); font-size: 11.5px; }
+.collector-shell .collector-environment-table-scroll { border: 1px solid var(--color-border-subtle); border-radius: var(--radius-lg); }
+.collector-shell .collector-log-table td:first-child { color: var(--color-text-muted); font-family: var(--font-mono); font-size: 11.5px; white-space: nowrap; }
+.collector-shell .collector-log-table .is-error, .collector-shell .collector-log-table .is-warning { font-weight: var(--font-weight-bold); }
+
+/* ===== Filter bars ===== */
+.collector-shell :is(.collector-task-filters, .collector-log-filters) {
+  gap: 10px;
+  padding: 14px 16px;
+  border-top: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: color-mix(in srgb, var(--color-surface-soft) 55%, transparent);
+}
+.collector-shell :is(.collector-task-filters, .collector-log-filters, .collector-environment-filters, .research-date-range) label,
+.collector-shell .research-form > label {
+  gap: 5px;
+  color: var(--color-text-subtle);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.04em;
+}
+.collector-shell :is(.collector-task-filters, .collector-log-filters, .collector-environment-filters, .collector-request-filters, .collector-environment-runtime) :is(input:not([type="checkbox"]):not([type="radio"]), select),
+.collector-shell .research-form :is(input:not([type="checkbox"]):not([type="radio"]), textarea),
+.modal-card :is(.collector-export-form, .collector-source-form, .collector-token-form) :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  letter-spacing: 0;
+  box-shadow: var(--shadow-xs);
+  transition: var(--transition-interactive);
+}
+.collector-shell .research-form textarea, .modal-card :is(.collector-export-form, .collector-source-form, .collector-token-form) textarea { height: auto; padding: 9px 11px; }
+.collector-shell :is(.collector-task-filters, .collector-log-filters, .collector-environment-filters, .collector-request-filters, .collector-environment-runtime) select,
+.modal-card :is(.collector-export-form, .collector-source-form, .collector-token-form) select {
+  appearance: none;
+  padding-right: 30px;
+  background: var(--color-surface) var(--select-arrow) no-repeat right 11px center / 10px 7px;
+}
+.collector-shell :is(.collector-task-filters, .collector-log-filters, .collector-environment-filters, .collector-request-filters, .collector-environment-runtime) :is(input:not([type="checkbox"]):not([type="radio"]), select):hover,
+.collector-shell .research-form :is(input:not([type="checkbox"]):not([type="radio"]), textarea):hover { border-color: var(--color-border-strong); }
+.collector-shell :is(.collector-task-filters, .collector-log-filters, .collector-environment-filters, .collector-request-filters, .collector-environment-runtime) :is(input:not([type="checkbox"]):not([type="radio"]), select):focus-visible,
+.collector-shell .research-form :is(input:not([type="checkbox"]):not([type="radio"]), textarea):focus-visible,
+.modal-card :is(.collector-export-form, .collector-source-form, .collector-token-form) :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea):focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-focus);
+}
+[data-theme="dark"] .collector-shell :is(.collector-task-filters, .collector-log-filters, .collector-environment-filters, .collector-request-filters, .collector-environment-runtime) :is(input:not([type="checkbox"]):not([type="radio"]), select),
+[data-theme="dark"] .collector-shell .research-form :is(input:not([type="checkbox"]):not([type="radio"]), textarea),
+[data-theme="dark"] .modal-card :is(.collector-export-form, .collector-source-form, .collector-token-form) :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { background-color: var(--color-surface-sunken); }
+
+/* ===== Pagination & inline states ===== */
+.collector-shell :is(.collector-source-pagination, .collector-task-pagination, .collector-log-pagination) {
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-border-subtle);
+  color: var(--color-text-subtle);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+.collector-shell :is(.collector-source-refreshing, .collector-task-refreshing) {
+  position: relative;
+  overflow: hidden;
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+.collector-shell :is(.collector-source-refreshing, .collector-task-refreshing)::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 40%;
+  background: var(--gradient-signal);
+  animation: indeterminate 1.2s var(--ease-in-out) infinite;
+}
+@keyframes indeterminate { from { transform: translateX(-100%); } to { transform: translateX(260%); } }
+.collector-shell :is(.collector-source-state, .collector-task-state, .collector-export-state, .collector-token-state, .collector-environment-empty, .collector-environment-loading) { color: var(--color-text-subtle); }
+
+/* ===== Status pills ===== */
+.collector-shell :is(.collector-task-status, .collector-task-execution-bucket, .research-status, .collector-source-switch, .collector-token-status, .collector-request-status, .collector-environment-state, .collector-environment-account-state, .collector-source-health) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+.collector-shell :is(.collector-task-status, .collector-task-execution-bucket, .research-status, .collector-source-switch, .collector-token-status, .collector-environment-state, .collector-environment-account-state)::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.9;
+}
+.collector-shell .collector-source-health i { display: none; }
+.collector-shell .collector-source-health::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.collector-shell :is(.collector-task-status.is-completed, .collector-task-execution-bucket.is-executed, .research-status.is-completed, .collector-source-switch.is-enabled, .collector-token-status.is-active, .collector-environment-state.is-installed, .collector-environment-state.is-configured, .collector-environment-state.is-ready, .collector-environment-account-state.is-verified, .collector-environment-account-state.is-public, .collector-source-health--healthy) {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+.collector-shell :is(.collector-task-status.is-attention, .collector-task-execution-bucket.is-due, .research-status.is-failed, .research-status.is-partial, .collector-environment-state.is-unknown, .collector-environment-account-state.is-unknown, .collector-source-health--needs_attention, .collector-source-health--degraded) {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+.collector-shell :is(.collector-task-status.is-running, .collector-task-execution-bucket.is-running, .research-status.is-running, .research-status.is-queued) {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+.collector-shell :is(.collector-task-status.is-running, .collector-task-execution-bucket.is-running, .research-status.is-running)::before { animation: pulse-ring 1.6s var(--ease-out) infinite; }
+.collector-shell :is(.collector-token-status.is-revoked, .collector-environment-state.is-missing, .collector-environment-state.is-failed, .collector-environment-account-state.is-needs_login, .collector-environment-account-state.is-failed) {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+.collector-shell .collector-environment-account-state { display: inline-flex; }
+
+/* ===== Page specifics ===== */
+.collector-shell :is(.collector-task-page, .collector-token-page) > .segmented-control { justify-self: start; }
+.collector-shell .collector-source-heading,
+.collector-shell .collector-task-heading,
+.collector-shell .collector-token-heading,
+.collector-shell .collector-export-heading,
+.collector-shell .collector-environment-heading { padding: 4px 2px 0; }
+
+.collector-shell .collector-token-overview { padding: 18px 20px; }
+.collector-shell .collector-token-overview__icon { width: 48px; height: 48px; border-radius: var(--radius-lg); background: var(--gradient-accent); color: var(--color-white); box-shadow: var(--shadow-accent); }
+.collector-shell .collector-token-security { border-radius: var(--radius-lg); }
+.collector-shell .collector-token-scope { height: 22px; align-items: center; padding: 0 8px; font-family: var(--font-mono); font-size: 11px; }
+
+.collector-shell .collector-export-capabilities { gap: 14px; }
+.collector-shell .collector-export-capabilities article {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  padding: 20px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+  box-shadow: var(--shadow-sm);
+  transition: transform 500ms var(--ease-out), box-shadow 500ms var(--ease-out);
+}
+.collector-shell .collector-export-capabilities article:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+.collector-shell .collector-export-capabilities article > span {
+  display: inline-flex;
+  height: 22px;
+  align-items: center;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--tracking-caps);
+}
+.collector-shell .collector-export-capabilities article:nth-child(2) > span { background: color-mix(in srgb, var(--aurora-3) 16%, transparent); color: var(--color-cyan-label); }
+.collector-shell .collector-export-capabilities article:nth-child(3) > span { background: color-mix(in srgb, var(--aurora-4) 16%, transparent); color: var(--color-pink-label); }
+.collector-shell .collector-export-capabilities h3 { margin: 12px 0 6px; font-size: var(--font-size-lg); }
+.collector-shell .collector-logs-title { padding: 18px 20px 14px; }
+
+.collector-shell .collector-task-queues ul { gap: 10px; }
+.collector-shell .collector-task-queues li { padding: 12px 14px; }
+
+.collector-shell .research-platform-picker label { border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: var(--color-surface-soft); transition: var(--transition-interactive); }
+.collector-shell .research-platform-picker label:hover:not(.is-unavailable) { border-color: var(--color-border-strong); background: var(--color-surface); }
+.collector-shell .research-platform-picker label:has(input:checked) { border-color: color-mix(in srgb, var(--color-accent) 45%, transparent); background: var(--color-accent-subtle); box-shadow: var(--shadow-focus-sm); }
+.collector-shell .research-form fieldset { border-color: var(--color-border-subtle); border-radius: var(--radius-lg); }
+
+.collector-shell :is(.collector-environment-blocking, .collector-environment-runtime-alert, .collector-task-blocking) { border-radius: var(--radius-lg); }
+.collector-shell :is(.collector-environment-protection, .collector-auth-recovery) { border-radius: var(--radius-xl); padding: 18px 20px; box-shadow: var(--shadow-sm); }
+
+/* ===== LAN account ===== */
+.collector-shell .lan-account { display: grid; gap: 18px; padding: 0; }
+.collector-shell .lan-account > p:first-child {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 1000px;
+  padding: 16px 18px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--color-surface) 80%, transparent);
+  color: var(--color-text-muted);
+  box-shadow: var(--shadow-sm);
+}
+.collector-shell .lan-account > p:first-child::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--icon-shield) center / 18px no-repeat, var(--gradient-accent);
+  box-shadow: var(--shadow-accent);
+}
+.collector-shell .lan-account > p[role="alert"] { padding: 12px 16px; border-radius: var(--radius-lg); background: var(--color-danger-soft); color: var(--color-danger); max-width: 1000px; }
+.collector-shell .lan-account__form { border: 1px solid var(--color-border-subtle); border-radius: var(--radius-xl); background: color-mix(in srgb, var(--color-surface) 88%, transparent); box-shadow: var(--shadow-sm); }
+.collector-shell .lan-account__form input { height: 40px; border-radius: var(--radius-md); font-size: var(--font-size-md); box-shadow: var(--shadow-xs); transition: var(--transition-interactive); }
+.collector-shell .lan-account__form input:focus-visible { outline: none; border-color: var(--color-accent); box-shadow: var(--shadow-focus); }
+.collector-shell .lan-account__submit { height: 40px; padding: 0 20px; border-radius: var(--radius-md); background: var(--gradient-accent); color: var(--color-white); font-weight: var(--font-weight-semibold); box-shadow: var(--shadow-accent); transition: var(--transition-interactive); }
+.collector-shell .lan-account__submit:hover { transform: translateY(-1px); }
+
+/* Platform-identified cells */
+.platform-cell { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.platform-cell > div { display: grid; gap: 2px; min-width: 0; }
+.platform-cell strong { display: block; min-width: 0; }
+.platform-cell small { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.platform-cell .platform-mark { flex: 0 0 auto; }
+.collector-shell .collector-source-table td:first-child { min-width: 230px; }
+.platform-cell small { color: var(--color-text-subtle); font-size: var(--font-size-2xs); }
+.platform-cell .platform-mark__glyph { width: 30px; height: 30px; border-radius: var(--radius-md); }
+.collector-shell td .platform-mark { display: inline-flex; }
+.collector-shell td .platform-mark .platform-mark__glyph { display: grid; }
+.collector-shell td .platform-mark .platform-mark__label { display: inline; font-weight: var(--font-weight-medium); }
+td > .platform-mark { vertical-align: middle; }

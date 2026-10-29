@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Save to InfoOS</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="popup-page">
+    <main class="panel" aria-labelledby="product-title">
+      <header class="brand-row">
+        <div class="brand-mark" aria-hidden="true">信</div>
+        <div>
+          <p class="eyebrow">SAVE TO INFOOS</p>
+          <h1 id="product-title">交给 InfoOS</h1>
+        </div>
+        <button id="open-options" class="icon-button" type="button" aria-label="打开设置">设置</button>
+      </header>
+
+      <section class="page-summary" aria-live="polite">
+        <p id="page-title" class="page-title">正在读取当前页面…</p>
+        <p id="page-origin" class="muted"></p>
+      </section>
+
+      <label class="field">
+        <span>捕获模式</span>
+        <select id="capture-mode">
+          <option value="url_only">仅链接（推荐）</option>
+          <option value="readable_content">同时提交当前正文</option>
+        </select>
+      </label>
+
+      <p id="mode-help" class="mode-help">
+        InfoOS 将自行抓取正文、媒体并生成信息卡。
+      </p>
+
+      <button id="capture-button" class="primary-button" type="button">交给 InfoOS</button>
+
+      <section id="status-card" class="status-card is-hidden" aria-live="polite" aria-atomic="true">
+        <p id="status-label" class="status-label"></p>
+        <p id="status-message" class="status-message"></p>
+        <div class="action-row">
+          <button id="retry-button" class="secondary-button is-hidden" type="button">重试</button>
+          <button id="downgrade-button" class="secondary-button is-hidden" type="button">改用仅链接</button>
+          <button id="view-button" class="secondary-button is-hidden" type="button">在 InfoOS 查看</button>
+          <button id="close-button" class="text-button" type="button">关闭</button>
+        </div>
+      </section>
+
+      <p id="configuration-hint" class="configuration-hint is-hidden">
+        尚未连接 InfoOS。请先填写产品地址和捕获 Token。
+      </p>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

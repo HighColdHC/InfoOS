@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+[ "${INFOOS_EMBEDDED_PROXY_ENABLED:-0}" = "1" ] || exit 0
+exec curl --fail --silent --noproxy '*' \
+  "http://127.0.0.1:${INFOOS_EMBEDDED_PROXY_CONTROL_PORT:-19090}/version"

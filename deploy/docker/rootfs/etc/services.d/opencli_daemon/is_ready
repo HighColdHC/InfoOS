@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+
+exec curl --fail --silent --header 'X-OpenCLI: 1' http://127.0.0.1:19825/status

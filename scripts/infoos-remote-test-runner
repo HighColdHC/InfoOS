@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# Remote half of scripts/infoos-remote-test; runs as root on the Linux dev machine.
+#
+# Usage: bash runner.sh RUN_ID MODE [pytest args...]
+#
+# The whole run lives in one transient systemd scope (memory cap, no swap, nice 10,
+# hard runtime cap), so a runaway suite is OOM-killed inside its own cgroup and never
+# squeezes any running appliance. stdin is the liveness pipe from the caller:
+# when it reaches EOF (local process killed, ssh dropped) the scope is stopped, which
+# kills every descendant, including workers already reparented to PID 1.
+set -euo pipefail
+
+BASE=/var/tmp/infoos-devtest
+MEMORY_MAX=12G
+RUNTIME_MAX_SEC=4500
+STEP_TIMEOUT=30m
+VITEST_MAX_WORKERS=4
+ORPHAN_MIN_AGE_SEC=1800
+
+inner() {
+  local run=$1 mode=$2
+  shift 2
+  mkdir -p "$run/src" && tar -xzf "$run/src.tar.gz" -C "$run/src" && rm -f "$run/src.tar.gz"
+  cd "$run/src"
+  # Rebuild the shared virtualenv only when the dependency declaration changes.
+  local deps_hash venv status=0
+  deps_hash=$(sha256sum pyproject.toml | cut -c1-16)
+  venv=$BASE/venv-$deps_hash
+  if [ ! -x "$venv/bin/pytest" ]; then
+    python3 -m venv "$venv"
+    "$venv/bin/pip" install -q --upgrade pip
+    "$venv/bin/pip" install -q '.[dev,web]'
+  fi
+  # timeout leads its own process group and signals the whole group on expiry.
+  if [ "$mode" != frontend ]; then
+    INFOOS_STATE_HOME=$run/state INFOOS_DATA_HOME=$run/data PYTHONPATH=. \
+      timeout --kill-after=30s "$STEP_TIMEOUT" "$venv/bin/python" -m pytest "$@" || status=$?
+    report_timeout pytest "$status"
+  fi
+  if [ "$mode" != python ]; then
+    local lock_hash npm_dir step_status=0
+    lock_hash=$(sha256sum frontend/package-lock.json | cut -c1-16)
+    npm_dir=$BASE/npm-$lock_hash
+    # Keep the directory named node_modules: Node resolves packages by walking parent node_modules dirs.
+    if [ ! -f "$npm_dir/.complete" ]; then
+      rm -rf "$npm_dir" && mkdir -p "$npm_dir" && cp frontend/package.json frontend/package-lock.json "$npm_dir/"
+      (cd "$npm_dir" && npm ci --no-audit --no-fund --loglevel=error) && touch "$npm_dir/.complete"
+    fi
+    ln -sfn "$npm_dir/node_modules" frontend/node_modules
+    timeout --kill-after=30s "$STEP_TIMEOUT" bash -c "npm --prefix frontend test -- --run --maxWorkers=$VITEST_MAX_WORKERS \
+      && npm --prefix frontend run lint && npm --prefix frontend run build" || step_status=$?
+    report_timeout frontend "$step_status"
+    [ "$step_status" = 0 ] || status=$step_status
+  fi
+  return "$status"
+}
+
+report_timeout() {
+  case $2 in 124 | 137) echo "remote-test: $1 step hit the $STEP_TIMEOUT timeout and was killed" >&2 ;; esac
+}
+
+# Kill test processes left by earlier runs whose parent died before the scope guard
+# existed: reparented to PID 1, host PID namespace (never container processes), cwd
+# inside a run directory, node/python executable, and older than ORPHAN_MIN_AGE_SEC.
+reap_orphans() {
+  local host_ns pid ppid age cwd exe victims=()
+  host_ns=$(readlink /proc/1/ns/pid)
+  while read -r pid ppid age; do
+    [ "$ppid" = 1 ] && [ "$age" -ge "$ORPHAN_MIN_AGE_SEC" ] || continue
+    [ "$(readlink "/proc/$pid/ns/pid" 2>/dev/null)" = "$host_ns" ] || continue
+    cwd=$(readlink "/proc/$pid/cwd" 2>/dev/null) || continue
+    case $cwd in "$BASE"/runs/*) ;; *) continue ;; esac
+    exe=$(readlink "/proc/$pid/exe" 2>/dev/null) || continue
+    case ${exe##*/} in node | python*) ;; *) continue ;; esac
+    echo "remote-test: reaping orphan pid=$pid exe=$exe age=${age}s cwd=$cwd" >&2
+    victims+=("$pid")
+  done < <(ps -eo pid=,ppid=,etimes=)
+  [ ${#victims[@]} -gt 0 ] || return 0
+  kill -TERM "${victims[@]}" 2>/dev/null || true
+  sleep 5
+  kill -KILL "${victims[@]}" 2>/dev/null || true
+}
+
+if [ "${1:-}" = --inner ]; then
+  shift
+  inner "$@"
+  exit
+fi
+
+RUN_ID=$1 MODE=$2
+shift 2
+RUN=$BASE/runs/$RUN_ID
+UNIT=infoos-devtest-$RUN_ID.scope
+
+reap_orphans
+
+exec 3<&0
+systemd-run --scope --quiet --unit="$UNIT" --nice=10 \
+  -p MemoryMax=$MEMORY_MAX -p MemorySwapMax=0 -p RuntimeMaxSec=$RUNTIME_MAX_SEC \
+  bash "$0" --inner "$RUN" "$MODE" "$@" </dev/null 3<&- &
+TEST_PID=$!
+# read is a builtin, so killing this subshell leaves no child behind.
+(
+  while read -r -u 3 _; do :; done
+  systemctl stop "$UNIT"
+) >/dev/null 2>&1 &
+WATCH_PID=$!
+exec 3<&-
+
+STATUS=0
+wait "$TEST_PID" || STATUS=$?
+kill "$WATCH_PID" 2>/dev/null || true
+# Workers that outlived the suite's main process keep the scope alive; stop it too.
+systemctl stop "$UNIT" 2>/dev/null || true
+# Prune by age, not count: concurrent runs from other worktrees must keep their directories.
+find "$BASE/runs" -mindepth 1 -maxdepth 1 -mmin +360 -exec rm -rf {} +
+echo "remote-test run=$RUN_ID mode=$MODE status=$STATUS"
+exit "$STATUS"

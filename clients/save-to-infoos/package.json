@@ -1,0 +1,27 @@
+{
+  "name": "@infoos/save-to-infoos",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "audit:permissions": "vitest run tests/manifest.test.ts",
+    "verify": "npm run check && npm run test && npm run build && npm run audit:permissions",
+    "mock-server": "node scripts/mock-capture-server.mjs"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.2.2",
+    "@types/jsdom": "^21.1.7",
+    "@types/mozilla-readability": "^0.2.1",
+    "esbuild": "^0.25.8",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

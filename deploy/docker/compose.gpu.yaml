@@ -1,0 +1,12 @@
+services:
+  infoos:
+    build:
+      args:
+        INFOOS_INSTALL_CUDA_ASR: "1"
+    gpus: all
+    environment:
+      INFOOS_FASTER_WHISPER_CUDA_ENABLED: "1"
+      INFOOS_FASTER_WHISPER_DOWNLOAD_ROOT: /var/lib/infoos/state/models/faster-whisper
+      INFOOS_FASTER_WHISPER_PERSISTENT_RUNTIME_ENABLED: "1"
+      NVIDIA_VISIBLE_DEVICES: ${INFOOS_NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility

@@ -1,0 +1,206 @@
+/* Modal — backdrop, card, header, status, grid, body, meta list, breadcrumb,
+ * error banner, tabs, feedback popover, and modal action groups.
+ *
+ * Modal-level primitives live in primitives.css; this file owns the
+ * page-level modal composition only. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  /* Mobile collector navigation is fixed at z-index 50. Dialogs must remain
+   * the top interaction surface so their actions are never covered. */
+  z-index: 100;
+  background: color-mix(in srgb, var(--color-ink-deep) 42%, transparent);
+  backdrop-filter: var(--blur-modal);
+  -webkit-backdrop-filter: var(--blur-modal);
+  display: grid;
+  place-items: center;
+  padding: var(--space-xl);
+  animation: fade-in 220ms var(--ease-out) both;
+}
+[data-theme="dark"] .modal-backdrop { background: color-mix(in srgb, var(--color-ink-deep) 60%, transparent); }
+
+.modal-card {
+  width: min(960px, 100%);
+  max-height: min(760px, 92dvh);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-xl), inset 0 1px 0 var(--color-hairline);
+  animation: modal-in 420ms var(--ease-out) both;
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: translate3d(0, 18px, 0) scale(0.96); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
+.modal-backdrop--fullscreen {
+  padding: 0;
+}
+
+.modal-backdrop--fullscreen .modal-card {
+  width: 96vw;
+  max-width: none;
+  height: 94vh;
+  height: 94dvh;
+  max-height: none;
+}
+
+@media (max-width: 860px) {
+  .modal-backdrop--fullscreen .modal-card {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    border-radius: 0;
+  }
+}
+
+.modal-header {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  align-items: center;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: var(--color-glass-bg-strong);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+}
+
+.modal-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: 17px;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.015em;
+}
+
+.modal-header-actions {
+  display: flex;
+  flex: 0 1 auto;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.modal-close {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  color: var(--color-text-muted);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  cursor: pointer;
+  transition: var(--transition-interactive);
+}
+
+.modal-close:hover:not(:disabled) {
+  color: var(--color-text);
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
+  transform: rotate(90deg);
+}
+
+.modal-close:active:not(:disabled) {
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+  transform: scale(0.94);
+}
+
+.modal-close:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.modal-close:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.modal-body {
+  padding: 20px 22px;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+/* The dialog body owns vertical scrolling. These feature containers used to
+ * create a second scrollbar inside the already-scrollable modal shell. */
+.modal-body > .collector-task-dialog-scroll,
+.modal-body > .collector-export-form {
+  max-height: none;
+  overflow-y: visible;
+}
+
+/* Keep every intentional inner scroller visually consistent with the shell. */
+.modal-card,
+.modal-card * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+.modal-card::-webkit-scrollbar,
+.modal-card *::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.modal-card::-webkit-scrollbar-track,
+.modal-card *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modal-card::-webkit-scrollbar-thumb,
+.modal-card *::-webkit-scrollbar-thumb {
+  min-height: 40px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--color-border-strong);
+  background-clip: padding-box;
+}
+
+.modal-card::-webkit-scrollbar-thumb:hover,
+.modal-card *::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-subtle);
+  background-clip: padding-box;
+}
+
+.modal-actions {
+  flex: 0 0 auto;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+  padding: 14px 22px;
+  border-top: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-soft);
+  justify-content: flex-end;
+}
+
+@media (max-width: 980px) {
+  .modal-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .modal-header-actions {
+    order: 3;
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .modal-close {
+    margin-left: auto;
+  }
+}

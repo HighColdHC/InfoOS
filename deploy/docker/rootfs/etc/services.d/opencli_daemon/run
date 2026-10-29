@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+
+daemon=/usr/local/lib/node_modules/@jackwener/opencli/dist/src/daemon.js
+runtime_uid="$(id -u)"
+for pid in $(lsof -t -iTCP:19825 -sTCP:LISTEN); do
+  identity="$(ps -p "$pid" -o uid= -o ppid= -o args=)"
+  read -r process_uid parent_pid command <<EOF
+$identity
+EOF
+  if [ "$process_uid" = "$runtime_uid" ] && [ "$parent_pid" = 1 ] && \
+      [ "$command" = "/usr/local/bin/node $daemon" ]; then
+    echo "[infoos-opencli] reclaiming orphan daemon pid=$pid"
+    kill -TERM "$pid"
+    waited=0
+    while lsof -t -iTCP:19825 -sTCP:LISTEN >/dev/null; do
+      if [ "$waited" -ge 10 ]; then
+        echo "[infoos-opencli] port 19825 still occupied after orphan termination" >&2
+        exit 1
+      fi
+      sleep 1
+      waited="$((waited + 1))"
+    done
+  fi
+done
+
+exec /opt/infoos/bin/infoos-run-service opencli \
+  /usr/local/bin/node "$daemon"

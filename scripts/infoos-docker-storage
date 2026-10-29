@@ -1,0 +1,318 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+current_container="${INFOOS_DOCKER_CURRENT_CONTAINER:-infoos-acceptance}"
+rollback_prefix="${INFOOS_DOCKER_ROLLBACK_PREFIX:-infoos-acceptance-rollback-}"
+keep_rollbacks="${INFOOS_DOCKER_KEEP_ROLLBACKS:-2}"
+image_repository="${INFOOS_DOCKER_IMAGE_REPOSITORY:-infoos-appliance}"
+build_cache_margin_hours="${INFOOS_DOCKER_BUILD_CACHE_MARGIN_HOURS:-6}"
+backup_root="${INFOOS_BACKUP_ROOT:-/var/backups/infoos}"
+keep_snapshots="${INFOOS_BACKUP_KEEP_SNAPSHOTS:-1}"
+keep_sqlite="${INFOOS_BACKUP_KEEP_SQLITE:-2}"
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/infoos-docker-storage inspect|apply
+
+Environment overrides:
+  INFOOS_DOCKER_CURRENT_CONTAINER  Current running Appliance container.
+  INFOOS_DOCKER_ROLLBACK_PREFIX    Prefix for rollback containers.
+  INFOOS_DOCKER_KEEP_ROLLBACKS     Number of newest rollback containers to keep.
+  INFOOS_DOCKER_IMAGE_REPOSITORY   Exact InfoOS image repository to manage.
+  INFOOS_DOCKER_BUILD_CACHE_MARGIN_HOURS
+                                   Keep BuildKit cache last used up to this many hours
+                                   before the current image was built (default 6).
+  INFOOS_BACKUP_ROOT               Recovery point directory (default /var/backups/infoos).
+  INFOOS_BACKUP_KEEP_SNAPSHOTS     Newest full and selective snapshots to keep separately (min 1).
+  INFOOS_BACKUP_KEEP_SQLITE        Newest SQLite-only recovery points to keep (min 1).
+
+Rollback containers, InfoOS image tags without any container, BuildKit cache
+not used since (current image build time - margin) and old recovery points
+are pruned. The current image's build chain is never trimmed by size. Docker volumes are never touched. Legacy
+tar-format backups are removed only once a newer full snapshot is retained.
+EOF
+}
+
+fail() {
+  printf 'infoos-docker-storage: %s\n' "$*" >&2
+  exit 2
+}
+
+[[ "$keep_snapshots" =~ ^[1-9][0-9]*$ ]] || fail "INFOOS_BACKUP_KEEP_SNAPSHOTS must be a positive integer"
+[[ "$keep_sqlite" =~ ^[1-9][0-9]*$ ]] || fail "INFOOS_BACKUP_KEEP_SQLITE must be a positive integer"
+[[ "$backup_root" == /* ]] || fail "INFOOS_BACKUP_ROOT must be absolute"
+[[ "$keep_rollbacks" =~ ^[0-9]+$ ]] || fail "INFOOS_DOCKER_KEEP_ROLLBACKS must be a non-negative integer"
+[[ "$current_container" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || fail "invalid current container name"
+[[ "$rollback_prefix" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || fail "invalid rollback container prefix"
+[[ "$image_repository" =~ ^[A-Za-z0-9][A-Za-z0-9_./:-]*$ ]] || fail "invalid image repository"
+[[ "$build_cache_margin_hours" =~ ^[0-9]+$ ]] || fail "INFOOS_DOCKER_BUILD_CACHE_MARGIN_HOURS must be a non-negative integer"
+command -v docker >/dev/null 2>&1 || fail "docker is not installed"
+docker info >/dev/null 2>&1 || fail "Docker daemon is unavailable"
+
+action="${1:-}"
+[[ "$#" == 1 ]] || { usage >&2; exit 64; }
+case "$action" in
+  inspect|apply) ;;
+  *) usage >&2; exit 64 ;;
+esac
+
+work_dir="$(mktemp -d)"
+trap 'rm -rf -- "$work_dir"' EXIT
+rollback_inventory="$work_dir/rollbacks"
+remove_targets="$work_dir/remove-targets"
+keep_targets="$work_dir/keep-targets"
+blocked_targets="$work_dir/blocked-targets"
+remove_names="$work_dir/remove-names"
+image_candidates_raw="$work_dir/image-candidates-raw"
+image_candidates="$work_dir/image-candidates"
+: >"$rollback_inventory"
+: >"$remove_targets"
+: >"$keep_targets"
+: >"$blocked_targets"
+: >"$remove_names"
+: >"$image_candidates_raw"
+: >"$image_candidates"
+
+while IFS= read -r container_id; do
+  [[ -n "$container_id" ]] || continue
+  docker inspect --format '{{.Created}}|{{.Name}}|{{.State.Status}}|{{.Config.Image}}|{{.Image}}' "$container_id"
+done < <(docker container ls --all --quiet) \
+  | awk -F '|' -v prefix="/$rollback_prefix" 'index($2, prefix) == 1 { print }' \
+  | sort --reverse >"$rollback_inventory"
+
+rollback_index=0
+while IFS='|' read -r created raw_name state image image_id; do
+  [[ -n "$created" ]] || continue
+  name="${raw_name#/}"
+  if (( rollback_index < keep_rollbacks )); then
+    printf '%s|%s|%s|%s|%s\n' "$created" "$name" "$state" "$image" "$image_id" >>"$keep_targets"
+  elif [[ "$state" != exited ]]; then
+    printf '%s|%s|%s|%s|%s\n' "$created" "$name" "$state" "$image" "$image_id" >>"$blocked_targets"
+  else
+    printf '%s|%s|%s|%s|%s\n' "$created" "$name" "$state" "$image" "$image_id" >>"$remove_targets"
+    printf '%s\n' "$name" >>"$remove_names"
+  fi
+  rollback_index=$((rollback_index + 1))
+done <"$rollback_inventory"
+
+while IFS='|' read -r _created _name _state image image_id; do
+  [[ "$image" == "$image_repository:"* ]] || continue
+  resolved_image_id="$(docker image inspect --format '{{.Id}}' "$image" 2>/dev/null || true)"
+  [[ "$resolved_image_id" == "$image_id" ]] || continue
+  printf '%s|%s\n' "$image_id" "$image" >>"$image_candidates_raw"
+done <"$remove_targets"
+while IFS= read -r image; do
+  [[ -n "$image" && "$image" != *"<none>"* ]] || continue
+  image_id="$(docker image inspect --format '{{.Id}}' "$image" 2>/dev/null || true)"
+  [[ -n "$image_id" ]] || continue
+  # Eligibility is decided below: only tags with no retained container reference qualify.
+  printf '%s|%s\n' "$image_id" "$image" >>"$image_candidates_raw"
+done < <(docker image ls "$image_repository" --format '{{.Repository}}:{{.Tag}}')
+sort --unique "$image_candidates_raw" >"$image_candidates"
+
+# Recovery points: classify each directory under backup_root by its contents.
+backup_remove="$work_dir/backup-remove"
+: >"$backup_remove"
+classify_backup() {
+  local dir="$1"
+  if [[ -f "$dir/receipt.json" ]] && grep -Eq '"backup_format"[[:space:]]*:[[:space:]]*"linked-files-v1"' "$dir/receipt.json" \
+    && [[ -d "$dir/assets" && -d "$dir/state" && -f "$dir/infoos.sqlite3" ]]; then
+    echo snapshot
+  elif [[ -f "$dir/receipt.json" ]] && grep -Eq '"backup_format"[[:space:]]*:[[:space:]]*"linked-files-v2"' "$dir/receipt.json" \
+    && [[ -d "$dir/assets" && -d "$dir/archive" && -d "$dir/state" && -f "$dir/infoos.sqlite3" ]]; then
+    echo snapshot
+  elif [[ -f "$dir/receipt.json" ]] && grep -Eq '"backup_format"[[:space:]]*:[[:space:]]*"linked-files-selective-v1"' "$dir/receipt.json" \
+    && [[ -d "$dir/assets" && -d "$dir/archive" && -d "$dir/state" && -f "$dir/infoos.sqlite3" ]]; then
+    echo selective
+  elif [[ -f "$dir/receipt.json" ]] && grep -Eq '"backup_format"[[:space:]]*:[[:space:]]*"selective-media-pruned-v1"' "$dir/receipt.json" \
+    && [[ -d "$dir/assets" && -d "$dir/state" && -f "$dir/infoos.sqlite3" ]]; then
+    echo selective
+  elif [[ -f "$dir/assets.tar" ]]; then
+    echo legacy-tar
+  elif [[ -f "$dir/infoos.sqlite3.zst" || -f "$dir/infoos.sqlite3" ]] && [[ ! -e "$dir/assets" && ! -e "$dir/state" ]]; then
+    echo sqlite
+  else
+    echo unknown
+  fi
+}
+snapshots_seen=0
+selective_seen=0
+sqlite_seen=0
+newest_kept_snapshot=""
+printf 'Recovery points under %s (keep full=%s selective=%s sqlite=%s):\n' "$backup_root" "$keep_snapshots" "$keep_snapshots" "$keep_sqlite"
+if [[ -d "$backup_root" ]]; then
+  while IFS= read -r dir; do
+    name="$(basename "$dir")"
+    if [[ -L "$dir" || "$name" == .* ]]; then continue; fi
+    kind="$(classify_backup "$dir")"
+    decision=keep
+    case "$kind" in
+      snapshot)
+        snapshots_seen=$((snapshots_seen + 1))
+        if (( snapshots_seen > keep_snapshots )); then decision=remove
+        elif [[ -z "$newest_kept_snapshot" ]]; then newest_kept_snapshot="$name"; fi
+        ;;
+      selective)
+        selective_seen=$((selective_seen + 1))
+        if (( selective_seen > keep_snapshots )); then decision=remove; fi
+        ;;
+      sqlite)
+        sqlite_seen=$((sqlite_seen + 1))
+        if (( sqlite_seen > keep_sqlite )); then decision=remove; fi
+        ;;
+    esac
+    printf '%s|%s|%s\n' "$name" "$kind" "$decision" >>"$work_dir/backup-plan"
+  done < <(find "$backup_root" -mindepth 1 -maxdepth 1 -type d | sort --reverse)
+fi
+if [[ -s "$work_dir/backup-plan" ]]; then
+  while IFS='|' read -r name kind decision; do
+    # A tar backup is only superseded by a newer retained full snapshot.
+    if [[ "$kind" == legacy-tar ]]; then
+      if [[ -n "$newest_kept_snapshot" && "$newest_kept_snapshot" > "$name" ]]; then decision=remove; fi
+    fi
+    size="$(du -sh "$backup_root/$name" 2>/dev/null | cut -f1)"
+    printf '  %-8s %-11s %-6s %s\n' "$decision" "$kind" "$size" "$name"
+    if [[ "$decision" == remove ]]; then printf '%s\n' "$name" >>"$backup_remove"; fi
+  done <"$work_dir/backup-plan"
+else
+  printf '  none\n'
+fi
+find "$backup_root" -mindepth 1 -maxdepth 1 -name '.pending-*' 2>/dev/null | sed 's/^/  stale pending (not removed): /' || true
+
+current_state="missing"
+current_image="unknown"
+if docker container inspect "$current_container" >/dev/null 2>&1; then
+  current_state="$(docker container inspect --format '{{.State.Status}}' "$current_container")"
+  current_image="$(docker container inspect --format '{{.Config.Image}}' "$current_container")"
+fi
+
+printf 'Current container: %s state=%s image=%s\n' "$current_container" "$current_state" "$current_image"
+printf 'Rollback policy: prefix=%s keep-newest=%s\n' "$rollback_prefix" "$keep_rollbacks"
+printf 'Retained rollback containers:\n'
+if [[ -s "$keep_targets" ]]; then
+  sed 's/^/  /' "$keep_targets"
+else
+  printf '  none\n'
+fi
+printf 'Extra rollback containers selected for removal:\n'
+if [[ -s "$remove_targets" ]]; then
+  sed 's/^/  /' "$remove_targets"
+else
+  printf '  none\n'
+fi
+printf 'Extra non-stopped rollback containers excluded from removal:\n'
+if [[ -s "$blocked_targets" ]]; then
+  sed 's/^/  /' "$blocked_targets"
+else
+  printf '  none\n'
+fi
+
+image_has_retained_container_ref() {
+  local image_id="$1"
+  local container_id name
+  while IFS= read -r container_id; do
+    [[ -n "$container_id" ]] || continue
+    name="$(docker container inspect --format '{{.Name}}' "$container_id")"
+    name="${name#/}"
+    if ! grep -Fqx -- "$name" "$remove_names"; then
+      return 0
+    fi
+  done < <(docker container ls --all --quiet --filter "ancestor=$image_id")
+  return 1
+}
+
+printf 'Image tags eligible after selected removals:\n'
+eligible_image_count=0
+while IFS='|' read -r image_id image; do
+  [[ -n "$image_id" ]] || continue
+  if ! image_has_retained_container_ref "$image_id"; then
+    printf '  %s id=%s\n' "$image" "$image_id"
+    eligible_image_count=$((eligible_image_count + 1))
+  fi
+done <"$image_candidates"
+if (( eligible_image_count == 0 )); then
+  printf '  none\n'
+fi
+# Size-based pruning (--max-used-space) is not LRU in practice: it once dropped
+# the current Python/CUDA chain and kept weeks-old copies. Prune by last use
+# relative to when the running image was built instead.
+current_image_created="$(docker image inspect --format '{{.Created}}' \
+  "$(docker container inspect --format '{{.Image}}' "$current_container" 2>/dev/null)" 2>/dev/null || true)"
+build_cache_until=""
+if [[ -n "$current_image_created" ]] \
+  && current_image_epoch="$(date -d "$current_image_created" +%s 2>/dev/null)"; then
+  cache_cutoff_epoch=$((current_image_epoch - build_cache_margin_hours * 3600))
+  build_cache_until="$(( $(date +%s) - cache_cutoff_epoch ))s"
+  printf 'BuildKit cache: current image built %s; remove cache last used before %s (until=%s)\n' \
+    "$current_image_created" "$(date -u -d "@$cache_cutoff_epoch" +%FT%TZ)" "$build_cache_until"
+else
+  printf 'BuildKit cache: current image build time unknown; cache is left untouched\n'
+fi
+docker system df | awk 'NR == 1 || $1 == "Build"'
+
+[[ "$action" == apply ]] || exit 0
+
+[[ "$current_state" == running ]] || fail "current container $current_container must be running before apply"
+[[ "$current_image" == "$image_repository:"* ]] || fail "current container image is outside repository $image_repository"
+
+while IFS='|' read -r _created name state _image _image_id; do
+  [[ -n "$name" ]] || continue
+  [[ "$state" == exited ]] || fail "selected rollback container $name is not stopped"
+  live_state="$(docker container inspect --format '{{.State.Status}}' "$name")"
+  [[ "$live_state" == exited ]] || fail "selected rollback container $name is no longer stopped"
+done <"$remove_targets"
+
+while IFS='|' read -r image_id image; do
+  [[ -n "$image_id" ]] || continue
+  resolved_image_id="$(docker image inspect --format '{{.Id}}' "$image" 2>/dev/null || true)"
+  [[ "$resolved_image_id" == "$image_id" ]] \
+    || fail "selected image tag $image no longer resolves to frozen image $image_id"
+done <"$image_candidates"
+
+while IFS='|' read -r _created name _state _image _image_id; do
+  [[ -n "$name" ]] || continue
+  live_state="$(docker container inspect --format '{{.State.Status}}' "$name")"
+  [[ "$live_state" == exited ]] || fail "selected rollback container $name is no longer stopped"
+  docker container rm "$name"
+done <"$remove_targets"
+
+while IFS='|' read -r image_id image; do
+  [[ -n "$image_id" ]] || continue
+  resolved_image_id="$(docker image inspect --format '{{.Id}}' "$image" 2>/dev/null || true)"
+  if [[ "$resolved_image_id" != "$image_id" ]]; then
+    printf 'Skipping changed or missing image tag: %s\n' "$image" >&2
+    continue
+  fi
+  if [[ -z "$(docker container ls --all --quiet --filter "ancestor=$image_id")" ]]; then
+    docker image rm "$image"
+  fi
+done <"$image_candidates"
+
+while IFS= read -r name; do
+  [[ -n "$name" && "$name" != */* && "$name" != .* ]] || continue
+  target="$backup_root/$name"
+  [[ -d "$target" && ! -L "$target" ]] || continue
+  rm -rf -- "$target"
+  printf 'Removed recovery point: %s\n' "$name"
+done <"$backup_remove"
+
+# Older SQLite-only recovery points were stored uncompressed; compress the retained ones.
+if [[ -d "$backup_root" ]]; then
+  while IFS= read -r dir; do
+    [[ "$(classify_backup "$dir")" == sqlite && -f "$dir/infoos.sqlite3" && ! -e "$dir/infoos.sqlite3.zst" ]] || continue
+    wal="$dir/infoos.sqlite3-wal"
+    if [[ -s "$wal" ]]; then
+      printf 'Skipping compression, non-empty WAL: %s\n' "$dir" >&2
+      continue
+    fi
+    zstd -q -T0 -3 "$dir/infoos.sqlite3" -o "$dir/infoos.sqlite3.zst"
+    zstd -q -t "$dir/infoos.sqlite3.zst"
+    rm -f -- "$dir/infoos.sqlite3" "$wal" "$dir/infoos.sqlite3-shm"
+    printf 'Compressed recovery point: %s\n' "$(basename "$dir")"
+  done < <(find "$backup_root" -mindepth 1 -maxdepth 1 -type d ! -name '.*')
+fi
+
+if [[ -n "$build_cache_until" ]]; then
+  docker builder prune --all --force --filter "until=$build_cache_until"
+fi
+printf 'InfoOS storage policy applied. Volumes were not touched.\n'

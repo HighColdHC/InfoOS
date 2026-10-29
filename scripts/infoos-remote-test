@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# Run the test suites on the remote Linux dev machine instead of the Mac.
+#
+# Set INFOOS_TEST_SSH_TARGET to your own SSH config alias (or provide a transport).
+# Usage: bash scripts/infoos-remote-test [--tree DIR] [--python|--frontend|--all] [-- pytest args...]
+#   --tree DIR   Worktree to test (default: this repository). Tracked and untracked,
+#                non-ignored files are shipped, so uncommitted changes are tested too.
+#   --python     Run pytest only (default: tests/infoos -q -n 8, or the args after --).
+#   --frontend   Run frontend tests, lint and build only.
+#   --all        Run both (default).
+#
+# Isolation: sources, the virtualenv, node_modules and every INFOOS_* data/state
+# directory live under /var/tmp/infoos-devtest on the remote host. Nothing touches
+# the infoos-acceptance container, its volumes or business data. The remote half,
+# scripts/infoos-remote-test-runner, runs everything in a transient systemd scope
+# (12G memory, no swap, nice 10, per-step 30 min timeouts) that is stopped as soon
+# as this local process goes away.
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TREE="$REPO_DIR"
+MODE=all
+PYTEST_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --tree) TREE="$(cd "$2" && pwd)"; shift 2 ;;
+    --python) MODE=python; shift ;;
+    --frontend) MODE=frontend; shift ;;
+    --all) MODE=all; shift ;;
+    --) shift; PYTEST_ARGS=("$@"); break ;;
+    *) echo "unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+[[ ${#PYTEST_ARGS[@]} -gt 0 ]] || PYTEST_ARGS=(tests/infoos -q -n 8)
+
+# Optional transport contract: bash <script> command <shell-command> / copy-to <src> <dst>.
+TRANSPORT="${INFOOS_REMOTE_TEST_TRANSPORT:-}"
+SSH_TARGET="${INFOOS_TEST_SSH_TARGET:-}"
+if [[ -z "$TRANSPORT" ]]; then
+  [[ "$SSH_TARGET" =~ ^[A-Za-z0-9_][A-Za-z0-9_.@-]*$ ]] || {
+    echo "set INFOOS_TEST_SSH_TARGET to your SSH config alias or user@host" >&2; exit 2;
+  }
+else
+  [[ -f "$TRANSPORT" ]] || { echo "transport script not found" >&2; exit 2; }
+fi
+transport() {
+  if [[ -n "$TRANSPORT" ]]; then
+    bash "$TRANSPORT" "$@"
+  else
+    case "$1" in
+      command) ssh -o BatchMode=yes -- "$SSH_TARGET" "$2" ;;
+      copy-to) scp -o BatchMode=yes -- "$2" "$SSH_TARGET:$3" ;;
+    esac
+  fi
+}
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+BASE=/var/tmp/infoos-devtest
+CACHE_DIR="$REPO_DIR/.codex-tmp"
+mkdir -p "$CACHE_DIR"
+ARCHIVE="$(mktemp "$CACHE_DIR/infoos-remote-test.XXXXXX")"
+trap 'rm -f "$ARCHIVE" "$ARCHIVE.fifo"' EXIT
+
+# Ship tracked + untracked non-ignored files (never node_modules, .venv, data or secrets).
+TAR_OPTIONS=()
+[[ "$(uname -s)" != Darwin ]] || TAR_OPTIONS+=(--no-mac-metadata)
+(cd "$TREE" && git ls-files -co --exclude-standard -z \
+  | grep -zv -e '^\.env' -e '/\.env' \
+  | perl -0 -ne 'chomp; print "$_\0" if -e $_' \
+  | COPYFILE_DISABLE=1 tar "${TAR_OPTIONS[@]}" --null -T - -czf "$ARCHIVE")
+
+RUN="$BASE/runs/$RUN_ID"
+transport command "mkdir -p $RUN" >/dev/null
+transport copy-to "$ARCHIVE" "$RUN/src.tar.gz" >/dev/null
+transport copy-to "$TREE/scripts/infoos-remote-test-runner" "$RUN/runner.sh" >/dev/null
+
+# ssh's stdin is a FIFO whose only writer is this shell. However this script dies
+# (TaskStop, timeout, SIGKILL, ssh drop), the remote runner sees EOF and stops the
+# run's systemd scope, so no remote test process outlives the local caller.
+LIVENESS="$ARCHIVE.fifo"
+mkfifo "$LIVENESS"
+transport command "bash $RUN/runner.sh $RUN_ID $MODE $(printf '%q ' "${PYTEST_ARGS[@]}")" <"$LIVENESS" &
+SSH_PID=$!
+exec 3>"$LIVENESS"
+rm -f "$LIVENESS"
+wait "$SSH_PID"

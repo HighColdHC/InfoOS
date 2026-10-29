@@ -1,0 +1,1 @@
+"""InfoOS browser session module — owns the dedicated-Chrome ↔ OpenCLI contextId contract."""

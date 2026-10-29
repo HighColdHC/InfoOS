@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+
+exec curl --fail --silent "http://127.0.0.1:${INFOOS_WEB_PORT:-8000}/healthz"

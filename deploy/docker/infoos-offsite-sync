@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+"""Sync verified database snapshots; no credentials or schedules are installed."""
+from __future__ import annotations
+
+import argparse
+from contextlib import contextmanager
+from datetime import datetime, timezone
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import shlex
+import shutil
+import stat
+import subprocess
+import sys
+import tarfile
+import tempfile
+
+CONFIG = Path('/etc/infoos/offsite.env')
+KEYS = ('STAGING', 'RSYNC_DEST', 'SSH_OPTS', 'KEEP', 'AGE_RECIPIENT')
+BACKUP = Path(__file__).with_name('infoos-backup')
+
+
+def configuration() -> dict:
+    values = {}
+    if CONFIG.exists():
+        facts = CONFIG.lstat()
+        if not stat.S_ISREG(facts.st_mode) or facts.st_uid != 0 or stat.S_IMODE(facts.st_mode) != 0o600:
+            raise ValueError('/etc/infoos/offsite.env must be a regular root-owned 0600 file')
+        for line in CONFIG.read_text().splitlines():
+            words = shlex.split(line, comments=True)
+            if not words:
+                continue
+            if words[0] == 'export':
+                words = words[1:]
+            if len(words) != 1 or '=' not in words[0]:
+                raise ValueError('offsite.env requires KEY=value lines (quote values with spaces)')
+            key, value = words[0].split('=', 1)
+            if key in {f'INFOOS_OFFSITE_{name}' for name in KEYS}:
+                values[key] = value
+    for name in KEYS:
+        key = f'INFOOS_OFFSITE_{name}'
+        if key in os.environ:
+            values[key] = os.environ[key]
+    result = {name.lower(): values.get(f'INFOOS_OFFSITE_{name}', '') for name in KEYS}
+    for name in ('staging', 'rsync_dest'):
+        if not result[name]:
+            raise ValueError(f'missing required configuration: INFOOS_OFFSITE_{name.upper()}')
+    if not Path(result['staging']).is_absolute():
+        raise ValueError('INFOOS_OFFSITE_STAGING must be an absolute local directory')
+    try:
+        result['keep'] = int(result['keep'] or '7')
+    except ValueError:
+        raise ValueError('INFOOS_OFFSITE_KEEP must be an integer >= 1') from None
+    if result['keep'] < 1:
+        raise ValueError('INFOOS_OFFSITE_KEEP must be >= 1')
+    dest = result['rsync_dest']
+    if ':' in dest:
+        host, path = dest.split(':', 1)
+        if not re.fullmatch(r'(?:[\w.-]+@)?[\w.-]+', host) or not path.startswith('/'):
+            raise ValueError('RSYNC_DEST must be user@host:/absolute/path/ or an absolute local path')
+        result['host'] = host.split('@')[-1]
+    else:
+        if not Path(dest).is_absolute():
+            raise ValueError('RSYNC_DEST must be an absolute local path or SSH destination')
+        staging, target = Path(result['staging']).resolve(), Path(dest).resolve()
+        if staging == target or staging in target.parents or target in staging.parents:
+            raise ValueError('staging and destination must be separate trees')
+        result['host'] = 'local'
+    result['destination'] = dest.rstrip('/') + '/infoos-db-only-' + ('encrypted/' if result['age_recipient'] else 'plain/')
+    return result
+
+
+def run(arguments: list[str], step: str) -> None:
+    # Tools may echo destination paths or SSH options. Keep them out of the log.
+    try:
+        subprocess.run(arguments, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(f'{step} failed (exit {exc.returncode}); previous successful snapshots retained locally') from None
+
+
+def rsync(source: Path, config: dict, *, prune: bool = False) -> None:
+    args = ['rsync', '-a', '-s']
+    if config['ssh_opts']:
+        args += ['-e', shlex.join(['ssh', *shlex.split(config['ssh_opts'])])]
+    if prune:
+        args.append('--delete-after')
+    run([*args, '--', str(source) + '/', config['destination']], 'rsync retention' if prune else 'rsync upload')
+
+
+def remove(path: Path) -> None:
+    if path.is_dir():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+
+
+@contextmanager
+def staging_lock(staging: Path):
+    staging.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if staging.is_symlink() or stat.S_IMODE(staging.stat().st_mode) != 0o700:
+        raise ValueError('STAGING must be a real directory with mode 0700')
+    with (staging / '.sync.lock').open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError('another offsite sync is already running') from None
+        yield
+
+
+def sync(config: dict) -> dict:
+    for tool in ('rsync', 'zstd', *(['age'] if config['age_recipient'] else [])):
+        if not shutil.which(tool):
+            raise ValueError(f'required executable missing: {tool}; install it before running sync')
+    staging = Path(config['staging'])
+    encrypted = bool(config['age_recipient'])
+    with staging_lock(staging):
+        snapshots = staging / 'snapshots'
+        sent = staging / ('sent-encrypted' if encrypted else 'sent-plain')
+        sent.mkdir(exist_ok=True, mode=0o700)
+        snapshot = None
+        uploaded = False
+        try:
+            # Capture only the path from create. Suppress tool output that could expose config.
+            result = subprocess.run([sys.executable, str(BACKUP), 'create', '--db-only', '--dest', str(snapshots)],
+                                    capture_output=True, text=True)
+            if result.returncode:
+                raise RuntimeError('database snapshot creation failed; check Docker, data mount and zstd')
+            snapshot = Path(result.stdout.strip())
+            run([sys.executable, str(BACKUP), 'verify', '--dest', str(snapshot)], 'snapshot verification')
+            with tempfile.TemporaryDirectory(prefix='.upload-', dir=staging) as temporary:
+                upload = Path(temporary)
+                if encrypted:
+                    archive = upload / 'snapshot.tar'
+                    with tarfile.open(archive, 'w') as stream:
+                        stream.add(snapshot, arcname=snapshot.name)
+                    payload = upload / (snapshot.name + '.tar.age')
+                    run(['age', '-r', config['age_recipient'], '-o', str(payload), str(archive)], 'age encryption')
+                    archive.unlink()  # Only ciphertext enters the transfer directory.
+                else:
+                    payload = upload / snapshot.name
+                    shutil.copytree(snapshot, payload, copy_function=os.link)
+                size = sum(p.stat().st_size for p in payload.rglob('*') if p.is_file()) if payload.is_dir() else payload.stat().st_size
+                rsync(upload, config)
+                uploaded = True
+                payload.rename(sent / payload.name)
+            # Upload has succeeded before any destination deletion. Mirror only a dedicated
+            # namespace; failed retention leaves the local previous successful copies intact.
+            candidates = sorted(sent.glob('infoos-backup-*'), reverse=True)
+            retained, obsolete = candidates[:config['keep']], candidates[config['keep']:]
+            with tempfile.TemporaryDirectory(prefix='.retention-', dir=staging) as temporary:
+                mirror = Path(temporary)
+                for path in retained:
+                    if path.is_dir():
+                        shutil.copytree(path, mirror / path.name, copy_function=os.link)
+                    else:
+                        os.link(path, mirror / path.name)
+                rsync(mirror, config, prune=True)
+            for path in obsolete:
+                remove(path)
+            # Raw snapshots follow the union of retained plaintext/encrypted exports.
+            names = {p.name.removesuffix('.tar.age') for folder in (staging / 'sent-plain', staging / 'sent-encrypted')
+                     if folder.exists() for p in folder.glob('infoos-backup-*')}
+            for path in snapshots.glob('infoos-backup-*'):
+                if path.name not in names:
+                    remove(path)
+            return {'time': datetime.now(timezone.utc).isoformat(), 'snapshot': snapshot.name,
+                    'bytes': size, 'encrypted': encrypted, 'destination_host': config['host']}
+        except BaseException:
+            if snapshot is not None and not uploaded:
+                remove(snapshot)
+            raise
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--dry-run', action='store_true', help='print steps without filesystem writes or network access')
+    args = parser.parse_args()
+    try:
+        config = configuration()
+        if args.dry_run:
+            print('infoos-backup create --db-only --dest <STAGING>/snapshots')
+            print('infoos-backup verify --dest <new snapshot>')
+            if config['age_recipient']:
+                print('tar snapshot; age -r <recipient>; transfer ciphertext only')
+            print(f'rsync new snapshot to <destination> (host: {config["host"]})')
+            print(f'after upload succeeds: rsync --delete-after dedicated namespace; retain {config["keep"]} locally and at destination')
+            print('emit JSON summary')
+        else:
+            os.umask(0o077)
+            print(json.dumps(sync(config), sort_keys=True))
+    except (OSError, ValueError, RuntimeError, tarfile.TarError) as exc:
+        # OS errors can contain private paths, so print their type only.
+        message = type(exc).__name__ if isinstance(exc, OSError) else str(exc)
+        parser.exit(1, f'infoos-offsite-sync: {message}\n')
+
+
+if __name__ == '__main__':
+    main()

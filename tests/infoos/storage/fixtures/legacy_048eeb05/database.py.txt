@@ -1,0 +1,469 @@
+"""storage.database — SQLite connection helpers for InfoOS.
+
+storage.database — module migrated to infoos in PR 4.5.
+The corresponding infoos/storage/database.py was deleted in this commit.
+This file is now the sole source of truth.
+"""
+
+from __future__ import annotations
+
+from contextlib import contextmanager
+import json
+import sqlite3
+from pathlib import Path
+from threading import Lock
+from typing import Iterator
+
+from backend.infrastructure.storage.paths import resolve_sqlite_path
+from backend.domain.timestamps import normalize_timestamp
+
+
+def default_database_path(base_dir: Path | str | None = None) -> Path:
+    """Return the canonical path to infoos.sqlite3.
+
+    Resolution order:
+      1. If ``base_dir`` is explicitly set (and not the default ``'.'``),
+         honor it. This is how tests use ``tmp_path`` to get isolated DBs.
+      2. Otherwise, fall back to the program-isolated data directory
+         (~/Library/Application Support/InfoOS/infoos.sqlite3 by default).
+    """
+    return resolve_sqlite_path(base_dir)
+
+
+@contextmanager
+def connect(db_path: Path | str) -> Iterator[sqlite3.Connection]:
+    path = Path(db_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path, timeout=10)
+    conn.row_factory = sqlite3.Row
+    conn.execute("pragma journal_mode = wal")
+    conn.execute("pragma foreign_keys = on")
+    conn.execute("pragma busy_timeout = 5000")
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def connect_writable(db_path: Path | str) -> sqlite3.Connection:
+    """Connect with write-friendly settings."""
+    path = Path(db_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path, timeout=30)
+    conn.row_factory = sqlite3.Row
+    conn.execute("pragma journal_mode = wal")
+    conn.execute("pragma foreign_keys = on")
+    conn.execute("pragma busy_timeout = 10000")
+    conn.execute("pragma synchronous = normal")
+    return conn
+
+
+@contextmanager
+def connect_existing(db_path: Path | str) -> Iterator[sqlite3.Connection]:
+    """Open an existing database without creating or configuring storage."""
+    path = Path(db_path).resolve()
+    conn = sqlite3.connect(f"{path.as_uri()}?mode=rw", uri=True, timeout=10)
+    conn.row_factory = sqlite3.Row
+    conn.create_function("source_timestamp", 1, normalize_timestamp, deterministic=True)
+    conn.execute("pragma foreign_keys = on")
+    conn.execute("pragma busy_timeout = 5000")
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+@contextmanager
+def connect_readonly(db_path: Path | str) -> Iterator[sqlite3.Connection]:
+    path = Path(db_path).resolve()
+    conn = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True, timeout=5)
+    conn.row_factory = sqlite3.Row
+    conn.execute("pragma query_only = on")
+    conn.create_function("source_timestamp", 1, normalize_timestamp, deterministic=True)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+_MIGRATION_SKIP_ERRORS = frozenset([
+    "duplicate column name",
+    "already exists",
+])
+
+
+def _migration_error_is_expected(error: str) -> bool:
+    return any(skip_text in error.lower() for skip_text in _MIGRATION_SKIP_ERRORS)
+
+
+def initialize_database(db_path: Path | str) -> Path:
+    path = Path(db_path)
+    with connect(path) as conn:
+        for schema_name in ("schema.sql", "schema_collector.sql"):
+            schema_text = Path(__file__).with_name(schema_name).read_text(encoding="utf-8")
+            statements = [s.strip() for s in schema_text.split(";") if s.strip()]
+            for statement in statements:
+                try:
+                    conn.execute(statement)
+                except sqlite3.OperationalError as exc:
+                    if _migration_error_is_expected(str(exc)):
+                        continue
+                    raise
+        # Release schema-write locks before data backfills. Additive ALTER
+        # migrations otherwise serialize concurrent initializers all the way
+        # through a potentially long backfill transaction.
+        conn.commit()
+        _backfill_versioned_card_insights(conn)
+        _backfill_source_calibration_versions(conn)
+        _backfill_search_index_v1(conn)
+        _backfill_card_completeness_v2(conn)
+        _backfill_x_card_enrichment_v1(conn)
+        _backfill_task_queues_v1(conn)
+        conn.commit()
+    return path
+
+
+_INITIALIZED_DATABASE_PATHS: set[Path] = set()
+_INITIALIZE_DATABASE_LOCK = Lock()
+
+
+def ensure_database_initialized(db_path: Path | str) -> Path:
+    """Initialize one database once per process, unless its file is removed."""
+    path = Path(db_path).expanduser().resolve()
+    with _INITIALIZE_DATABASE_LOCK:
+        if path in _INITIALIZED_DATABASE_PATHS and path.exists():
+            return path
+        initialized_path = Path(initialize_database(path)).expanduser().resolve()
+        _INITIALIZED_DATABASE_PATHS.add(initialized_path)
+        return initialized_path
+
+
+def _backfill_task_queues_v1(conn: sqlite3.Connection) -> None:
+    """Assign the durable queue policy to rows created before queue columns existed."""
+    from backend.infrastructure.storage.task_queue_policy import queue_policy_for
+    from backend.domain.tasks import Task, TaskType
+
+    marker = "migration.task_queues.v1"
+    claim = conn.execute(
+        "insert or ignore into settings(key, value, updated_at) values (?, 'complete', datetime('now'))",
+        (marker,),
+    )
+    if claim.rowcount == 0:
+        return
+    rows = conn.execute(
+        """
+        select task_id, task_type, target_kind, target_id, next_run_at, created_at
+        from tasks
+        where queue_name is null or priority is null or deadline_at is null
+        """
+    ).fetchall()
+    for row in rows:
+        task = Task(
+            task_id=str(row["task_id"]),
+            task_type=TaskType(str(row["task_type"])),
+            target_kind=str(row["target_kind"]),
+            target_id=str(row["target_id"]),
+            next_run_at=row["next_run_at"],
+        )
+        policy = queue_policy_for(
+            conn, task, enqueued_at=str(row["created_at"])
+        )
+        conn.execute(
+            """
+            update tasks
+            set queue_name = ?, priority = ?, deadline_at = ?
+            where task_id = ?
+            """,
+            (policy.queue_name, policy.priority, policy.deadline_at, task.task_id),
+        )
+
+
+def _backfill_versioned_card_insights(conn: sqlite3.Connection) -> None:
+    """Copy legacy latest-summary rows once without turning every open into a write."""
+    missing = conn.execute(
+        """
+        select 1
+        from card_ai_insights latest
+        left join card_ai_insight_versions versioned
+          on versioned.card_id = latest.card_id and versioned.input_version = latest.input_version
+        where latest.input_version is not null
+          and trim(latest.input_version) <> ''
+          and latest.status = 'succeeded'
+          and versioned.card_id is null
+        limit 1
+        """
+    ).fetchone()
+    if missing is None:
+        return
+    conn.execute(
+        """
+        insert or ignore into card_ai_insight_versions (
+          card_id, input_version, main_point, topic_assignment, scores, score_reasons,
+          why_it_matters, is_time_sensitive, evidence_quotes, status, last_error,
+          model, prompt_version, generated_at
+        )
+        select card_id, input_version, main_point, topic_assignment, scores, score_reasons,
+          why_it_matters, is_time_sensitive, evidence_quotes, status, last_error,
+          model, prompt_version, generated_at
+        from card_ai_insights
+        where input_version is not null and trim(input_version) <> '' and status = 'succeeded'
+        """
+    )
+
+
+def _backfill_source_calibration_versions(conn: sqlite3.Connection) -> None:
+    """Populate the current fingerprint for source rows created before the column existed."""
+    from backend.domain.sources.versioning import source_fetch_input_version
+
+    rows = conn.execute(
+        "select * from sources where calibration_input_version is null"
+    ).fetchall()
+    for row in rows:
+        source = dict(row)
+        source["raw_metadata"] = json.loads(source.get("raw_metadata") or "{}")
+        conn.execute(
+            "update sources set calibration_input_version = ? where source_id = ?",
+            (source_fetch_input_version(source), source["source_id"]),
+        )
+
+
+def _backfill_card_completeness_v2(conn: sqlite3.Connection) -> None:
+    """Repair cards made partial solely by the old no-media sentinel."""
+    from backend.domain.information_cards import information_card_content_hash
+
+    marker = "migration.card_completeness.v2"
+    claim = conn.execute(
+        "insert or ignore into settings(key, value, updated_at) values (?, 'complete', datetime('now'))",
+        (marker,),
+    )
+    if claim.rowcount == 0:
+        return
+    cards = conn.execute(
+        """
+        select * from cards
+        where completeness_status = 'partial'
+          and json_valid(missing_reasons)
+          and json_array_length(missing_reasons) = 1
+          and json_extract(missing_reasons, '$[0]') = 'skipped_no_media_expected'
+        """
+    ).fetchall()
+    for row in cards:
+        card = dict(row)
+        block_rows = conn.execute(
+            "select * from card_content_blocks where card_id = ? order by position, created_at, block_id",
+            (card["card_id"],),
+        ).fetchall()
+        blocks = []
+        for block_row in block_rows:
+            block = dict(block_row)
+            try:
+                block["segments"] = json.loads(block.get("segments") or "[]")
+            except (TypeError, ValueError):
+                block["segments"] = []
+            blocks.append(block)
+        assets = [
+            dict(asset)
+            for asset in conn.execute(
+                "select * from card_assets where card_id = ? order by created_at, asset_id",
+                (card["card_id"],),
+            ).fetchall()
+        ]
+        content_hash = information_card_content_hash(
+            card,
+            blocks,
+            assets,
+            completeness_status="complete",
+            missing_reasons=[],
+        )
+        changed = card.get("content_hash") != content_hash
+        conn.execute(
+            """
+            update cards set
+              version = version + ?,
+              content_hash = ?,
+              updated_at = case when ? then strftime('%Y-%m-%dT%H:%M:%SZ', 'now') else updated_at end,
+              status = 'active',
+              completeness_status = 'complete',
+              missing_reasons = '[]'
+            where card_id = ?
+            """,
+            (1 if changed else 0, content_hash, 1 if changed else 0, card["card_id"]),
+        )
+
+
+def _backfill_x_card_enrichment_v1(conn: sqlite3.Connection) -> None:
+    """Fill legacy X titles and resolve the audited zero-candidate no-media gap."""
+    from backend.domain.media_outcomes import is_resolved_x_no_media_outcome
+    from backend.domain.card_titles import information_card_title
+    from backend.domain.information_cards import information_card_content_hash
+
+    marker = "migration.x_card_enrichment.v1"
+    claim = conn.execute(
+        "insert or ignore into settings(key, value, updated_at) values (?, 'complete', datetime('now'))",
+        (marker,),
+    )
+    if claim.rowcount == 0:
+        return
+
+    changed_card_ids: set[str] = set()
+    for row in conn.execute(
+        "select card_id, title, content from cards where source_platform = 'x'"
+    ).fetchall():
+        if " ".join(str(row["title"] or "").split()):
+            continue
+        title = information_card_title("x", row["title"], row["content"])
+        if title:
+            conn.execute("update cards set title = ? where card_id = ?", (title, row["card_id"]))
+            changed_card_ids.add(str(row["card_id"]))
+
+    candidates = conn.execute(
+        """
+        select * from cards
+        where source_platform = 'x' and status = 'active' and completeness_status = 'partial'
+          and json_valid(missing_reasons)
+        """
+    ).fetchall()
+    for row in candidates:
+        card = dict(row)
+        try:
+            missing_reasons = json.loads(card.get("missing_reasons") or "[]")
+        except (TypeError, ValueError):
+            continue
+        normalized_reasons = {
+            str(reason).strip() for reason in missing_reasons if str(reason).strip()
+        } if isinstance(missing_reasons, list) else set()
+        if not normalized_reasons or not normalized_reasons <= {
+            "skipped_no_media_found",
+            "x_media_download_no_media_found",
+        }:
+            continue
+        latest_media_task = conn.execute(
+            """
+            select status, artifacts_summary from tasks
+            where task_type = 'media_download' and target_kind = 'card' and target_id = ?
+            order by coalesce(finished_at, updated_at, created_at) desc, created_at desc, rowid desc
+            limit 1
+            """,
+            (card["card_id"],),
+        ).fetchone()
+        if latest_media_task is None or str(latest_media_task["status"] or "") != "skipped":
+            continue
+        try:
+            latest_media_artifacts = json.loads(latest_media_task["artifacts_summary"] or "{}")
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(latest_media_artifacts, dict) or not is_resolved_x_no_media_outcome(
+            source_platform="x",
+            download_status=latest_media_artifacts.get("download_status"),
+            candidate_count=latest_media_artifacts.get("candidate_count"),
+            reasons=latest_media_artifacts.get("gap_reasons") or (),
+        ):
+            continue
+
+        conn.execute(
+            """
+            update card_content_blocks
+            set status = 'resolved',
+              raw_payload = json_set(coalesce(raw_payload, '{}'), '$.resolved', json('true')),
+              updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+            where card_id = ? and block_kind = 'media_download_gap' and status = 'blocked'
+              and json_valid(raw_payload)
+              and coalesce(json_extract(raw_payload, '$.reason'), json_extract(raw_payload, '$.block_reason'))
+                = 'x_media_download_no_media_found'
+            """,
+            (card["card_id"],),
+        )
+        conn.execute(
+            "update cards set completeness_status = 'complete', missing_reasons = '[]' where card_id = ?",
+            (card["card_id"],),
+        )
+        changed_card_ids.add(str(card["card_id"]))
+
+    for card_id in sorted(changed_card_ids):
+        card = dict(conn.execute("select * from cards where card_id = ?", (card_id,)).fetchone())
+        if (
+            str(card.get("status") or "") != "active"
+            or int(card.get("version") or 0) < 1
+            or not str(card.get("content_hash") or "").strip()
+        ):
+            continue
+        blocks = []
+        for block_row in conn.execute(
+            "select * from card_content_blocks where card_id = ? order by position, created_at, block_id",
+            (card_id,),
+        ).fetchall():
+            block = dict(block_row)
+            try:
+                block["segments"] = json.loads(block.get("segments") or "[]")
+            except (TypeError, ValueError):
+                block["segments"] = []
+            blocks.append(block)
+        assets = [
+            dict(asset)
+            for asset in conn.execute(
+                "select * from card_assets where card_id = ? order by created_at, asset_id",
+                (card_id,),
+            ).fetchall()
+        ]
+        try:
+            current_missing_reasons = json.loads(card.get("missing_reasons") or "[]")
+        except (TypeError, ValueError):
+            current_missing_reasons = []
+        if not isinstance(current_missing_reasons, list):
+            current_missing_reasons = []
+        content_hash = information_card_content_hash(
+            card,
+            blocks,
+            assets,
+            completeness_status=str(card.get("completeness_status") or "processing"),
+            missing_reasons=current_missing_reasons,
+        )
+        changed = card.get("content_hash") != content_hash
+        conn.execute(
+            """
+            update cards set version = version + ?, content_hash = ?,
+              updated_at = case when ? then strftime('%Y-%m-%dT%H:%M:%SZ', 'now') else updated_at end
+            where card_id = ?
+            """,
+            (1 if changed else 0, content_hash, 1 if changed else 0, card_id),
+        )
+        conn.execute(
+            "delete from infoos_search where entity_type = 'card' and entity_id = ?",
+            (card_id,),
+        )
+        conn.execute(
+            """
+            insert into infoos_search(entity_type, entity_id, title, body, source)
+            select 'card', card_id, title, content || ' ' || summary, source_author
+            from cards where card_id = ?
+            """,
+            (card_id,),
+        )
+
+
+def _backfill_search_index_v1(conn: sqlite3.Connection) -> None:
+    """Repair pre-migration card/topic FTS contents exactly once."""
+    marker = "migration.search_index.v1"
+    claim = conn.execute(
+        "insert or ignore into settings(key, value, updated_at) values (?, 'complete', datetime('now'))",
+        (marker,),
+    )
+    if claim.rowcount == 0:
+        return
+    conn.execute("delete from infoos_search")
+    conn.execute(
+        """
+        insert into infoos_search(entity_type, entity_id, title, body, source)
+        select 'card', card_id, title, content || ' ' || summary, source_author from cards
+        """
+    )
+    conn.execute(
+        """
+        insert into infoos_search(entity_type, entity_id, title, body, source)
+        select 'topic', topic_id, title, latest_progress || ' ' || ai_interpretation, source_summary from topics
+        """
+    )

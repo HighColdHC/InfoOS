@@ -1,0 +1,31 @@
+:root {
+  color-scheme: light;
+  --bg: #fafafa; --surface: #fff; --text: #1f1f23; --muted: #6b6b75;
+  --border: #e4e4e7; --accent: #176b4a; --soft: #e4f2eb; --error: #c53030;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; min-height: 100svh; display: grid; place-items: center; padding: 24px; color: var(--text); background: var(--bg); }
+.login-card { width: 100%; max-width: 432px; padding: 40px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); box-shadow: 0 18px 48px rgb(15 15 20 / 5%); }
+.brand { display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 650; letter-spacing: -0.6px; }
+.brand-symbol { display: grid; place-items: center; width: 32px; height: 32px; color: var(--accent); background: var(--soft); border-radius: 10px; font-family: Georgia, serif; font-style: italic; }
+.eyebrow { margin: 12px 0 36px; color: var(--muted); font-size: 12px; letter-spacing: 2px; }
+h1 { margin: 0 0 12px; font-size: 26px; font-weight: 600; }
+.intro { margin: 0 0 28px; color: var(--muted); font-size: 14px; line-height: 1.7; }
+label { display: block; margin: 20px 0 8px; font-size: 13px; font-weight: 550; }
+input, button { font: inherit; }
+input { width: 100%; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 16px; }
+input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.password-field { position: relative; }
+.password-field input { padding-right: 66px; }
+button { cursor: pointer; }
+.toggle { position: absolute; right: 4px; top: 4px; height: calc(100% - 8px); padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 13px; }
+.primary { margin-top: 28px; width: 100%; padding: 13px; border: 0; border-radius: 8px; color: white; background: var(--accent); font-size: 14px; font-weight: 600; }
+.primary:hover { filter: brightness(1.1); }
+button:disabled { opacity: 0.65; cursor: wait; }
+.error { color: var(--error); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.footer { margin: 28px 0 0; text-align: center; color: var(--muted); font-size: 11px; }
+@media (max-width: 420px) { body { padding: 16px; } .login-card { padding: 28px 24px; } }
+@media (prefers-color-scheme: dark) {
+  :root { color-scheme: dark; --bg: #111315; --surface: #1a1d1f; --text: #eceef0; --muted: #a1a7ad; --border: #34383d; --accent: #23875e; --soft: #203e31; --error: #fc9696; }
+}

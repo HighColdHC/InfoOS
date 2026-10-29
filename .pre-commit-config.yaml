@@ -1,0 +1,15 @@
+repos:
+  - repo: local
+    hooks:
+      - id: file-size-check
+        name: file-size-check
+        entry: python scripts/check_file_size.py
+        language: system
+        pass_filenames: false
+        types: [python, tsx, ts, jsx, js, vue]
+      - id: layer-deps-check
+        name: layer-deps-check
+        entry: python scripts/check_layer_deps.py
+        language: system
+        pass_filenames: false
+        types: [python]

@@ -1,0 +1,15 @@
+[Unit]
+Description=InfoOS external knowledge agent
+
+[Service]
+Type=oneshot
+WorkingDirectory=@INSTALL_DIR@
+Environment=@CONFIG_ENV@
+# Timer already applies the configured timezone, including Persistent catch-up.
+ExecStart=:/bin/bash @LAUNCHER@ --now
+TimeoutStartSec=@TIMEOUT@
+TimeoutStopSec=30
+KillMode=control-group
+UMask=0077
+StandardOutput=journal
+StandardError=journal

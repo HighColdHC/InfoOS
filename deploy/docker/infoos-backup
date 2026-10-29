@@ -1,0 +1,296 @@
+#!/usr/bin/env python3
+"""Create, verify and prune independent InfoOS data backups on the Docker host."""
+from __future__ import annotations
+
+import argparse
+from contextlib import closing
+from datetime import datetime, timezone
+import hashlib
+import importlib.util
+import json
+import os
+from pathlib import Path
+import shutil
+import sqlite3
+import subprocess
+import tempfile
+
+
+FORMAT = "infoos-offsite-v1"
+DATABASE = "infoos.sqlite3.zst"
+spec = importlib.util.spec_from_file_location("infoos_deploy_existing", Path(__file__).with_name("deploy-existing.py"))
+assert spec and spec.loader
+deployment = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(deployment)
+
+
+def digest(path: Path) -> str:
+    value = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            value.update(chunk)
+    return value.hexdigest()
+
+
+def database_facts(path: Path) -> tuple[int, dict[str, int]]:
+    with closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True)) as conn:
+        if conn.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+            raise ValueError("SQLite quick_check failed")
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        tables = {}
+        for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"):
+            tables[name] = conn.execute(f'SELECT count(*) FROM "{name.replace(chr(34), chr(34) * 2)}"').fetchone()[0]
+        return version, tables
+
+
+def safe_files(root: Path, label: str = "assets"):
+    if not root.is_dir() or root.is_symlink():
+        raise ValueError(f"invalid {label} directory: {root}")
+    for directory, dirs, files in os.walk(root, followlinks=False):
+        for name in dirs + files:
+            path = Path(directory) / name
+            if path.is_symlink():
+                raise ValueError(f"symlink in {label}: {path}")
+            if not (path.is_dir() or path.is_file()):
+                raise ValueError(f"special file in {label}: {path}")
+        for name in files:
+            yield Path(directory) / name
+
+
+def archive_files(root: Path, *, compressed: bool = False):
+    if root.is_symlink():
+        raise ValueError(f"invalid archive directory: {root}")
+    if not root.exists():
+        return
+    suffix = ".sqlite3.zst" if compressed else ".sqlite3"
+    for path in safe_files(root, "archive"):
+        if not compressed:
+            for ending in ("-wal", "-shm", "-journal"):
+                if path.name.endswith(f".sqlite3{ending}") and path.with_name(path.name.removesuffix(ending)).is_file():
+                    break
+            else:
+                ending = None
+            if ending:
+                continue
+        if not path.name.endswith(suffix):
+            raise ValueError(f"unsupported file in archive: {path}")
+        yield path
+
+
+def sqlite_backup(source_path: Path, copy: Path) -> tuple[int, dict[str, int], str]:
+    with closing(sqlite3.connect(f"file:{source_path}?mode=ro", uri=True)) as source:
+        with closing(sqlite3.connect(copy)) as destination:
+            source.backup(destination)
+            destination.execute("PRAGMA journal_mode=DELETE")
+    version, tables = database_facts(copy)
+    return version, tables, digest(copy)
+
+
+def compressed_facts(path: Path) -> dict[str, int | str]:
+    return {"size": path.stat().st_size, "sha256": digest(path)}
+
+
+def decompress_database(source: Path, output: Path) -> None:
+    with output.open("wb") as stream:
+        subprocess.run(["zstd", "-q", "-d", "-c", str(source)], stdout=stream, check=True)
+
+
+def verified_manifest(snapshot: Path) -> dict:
+    if snapshot.is_symlink() or not snapshot.is_dir():
+        raise ValueError("snapshot must be a directory")
+    manifest_path = snapshot / "manifest.json"
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise ValueError("missing manifest")
+    manifest = json.loads(manifest_path.read_text())
+    if not isinstance(manifest, dict) or manifest.get("format") != FORMAT or not isinstance(manifest.get("files"), dict):
+        raise ValueError("unrecognized backup manifest")
+    if manifest.get("scope", "full") not in ("full", "db-only"):
+        raise ValueError("invalid backup scope")
+    media_scope = manifest.get("media_scope", "full")
+    excluded = deployment.validate_media_exclusions(manifest.get("excluded_media", {}))
+    if (media_scope not in ("full", "selective") or (media_scope == "selective") != bool(excluded)
+            or (manifest.get("scope", "full") == "db-only" and excluded)
+            or any(f"assets/{relative}" in manifest["files"] for relative in excluded)):
+        raise ValueError("invalid backup media scope")
+    return manifest
+
+
+def verify(snapshot: Path) -> None:
+    manifest = verified_manifest(snapshot)
+    expected = manifest["files"]
+    archives = manifest.get("archives", {})
+    if not isinstance(archives, dict):
+        raise ValueError("invalid archive manifest")
+    actual = {DATABASE}
+    if manifest.get("scope", "full") == "full":
+        actual |= {f"assets/{path.relative_to(snapshot / 'assets').as_posix()}" for path in safe_files(snapshot / "assets")}
+    elif (snapshot / "assets").exists() or (snapshot / "assets").is_symlink():
+        raise ValueError("db-only snapshot must not contain assets")
+    actual |= {f"archive/{path.relative_to(snapshot / 'archive').as_posix()}" for path in archive_files(snapshot / "archive", compressed=True)}
+    if set(expected) != actual:
+        raise ValueError("backup file inventory differs from manifest")
+    if set(archives) != {key for key in actual if key.startswith("archive/")}:
+        raise ValueError("archive inventory differs from manifest")
+    for relative, facts in expected.items():
+        path = snapshot / relative
+        if path.is_symlink() or not path.is_file() or path.stat().st_size != facts["size"] or digest(path) != facts["sha256"]:
+            raise ValueError(f"backup file mismatch: {relative}")
+    with tempfile.TemporaryDirectory() as temporary:
+        copy = Path(temporary) / "infoos.sqlite3"
+        decompress_database(snapshot / DATABASE, copy)
+        version, tables = database_facts(copy)
+        for index, (relative, facts) in enumerate(sorted(archives.items())):
+            archive_copy = Path(temporary) / f"archive-{index}.sqlite3"
+            decompress_database(snapshot / relative, archive_copy)
+            archive_version, archive_tables = database_facts(archive_copy)
+            if (archive_version != facts["user_version"] or archive_tables != facts["table_counts"]
+                    or digest(archive_copy) != facts["sha256"]):
+                raise ValueError(f"archive SQLite facts differ from manifest: {relative}")
+    if version != manifest["user_version"] or tables != manifest["table_counts"]:
+        raise ValueError("SQLite version or table counts differ from manifest")
+
+
+def create(root: Path, data: Path, commit: str, *, db_only: bool = False) -> Path:
+    scope = "db-only" if db_only else "full"
+    if root.is_symlink():
+        raise ValueError("backup destination must be a real directory")
+    root = root.resolve()
+    data = data.resolve()
+    if root == data or data in root.parents or root in data.parents:
+        raise ValueError("backup destination and live data must be separate trees")
+    if not (data / "infoos.sqlite3").is_file():
+        raise ValueError("missing live SQLite database")
+    if root.exists() and not root.is_dir():
+        raise ValueError("backup destination must be a real directory")
+    root.mkdir(parents=True, mode=0o700, exist_ok=True)
+    previous = None
+    for candidate in sorted(root.iterdir(), reverse=True):
+        try:
+            manifest = verified_manifest(candidate)
+            if manifest.get("source_data") == str(data) and manifest.get("scope", "full") == scope:
+                previous = (candidate, manifest)
+                break
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    target = root / f"infoos-backup-{stamp}"
+    pending = root / f".pending-{stamp}"
+    pending.mkdir(mode=0o700)
+    try:
+        assets = pending / "assets"
+        if not db_only:
+            assets.mkdir(mode=0o700)
+        sqlite_copy = pending / "infoos.sqlite3"
+        version, tables, _ = sqlite_backup(data / "infoos.sqlite3", sqlite_copy)
+        media_exclusions = deployment.backup_media_exclusions(data, database=sqlite_copy) if not db_only else {}
+        subprocess.run(["zstd", "-q", "-T0", "-3", "--rm", str(sqlite_copy)], check=True)
+        files = {DATABASE: compressed_facts(pending / DATABASE)}
+        archives = {}
+        for source in archive_files(data / "archive"):
+            relative = source.relative_to(data / "archive")
+            output = pending / "archive" / relative
+            output.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            archive_version, archive_tables, checksum = sqlite_backup(source, output)
+            key = f"archive/{relative.as_posix()}.zst"
+            prior = previous[0] / key if previous else None
+            prior_facts = previous[1].get("archives", {}).get(key) if previous else None
+            prior_file = previous[1]["files"].get(key) if previous else None
+            if (prior and prior_facts and prior_facts.get("sha256") == checksum
+                    and prior.is_file() and not prior.is_symlink()
+                    and compressed_facts(prior) == prior_file):
+                output.unlink()
+                os.link(prior, pending / key)
+            else:
+                subprocess.run(["zstd", "-q", "-T0", "-3", "--rm", str(output)], check=True)
+            archives[key] = {"user_version": archive_version, "table_counts": archive_tables, "sha256": checksum}
+            files[key] = compressed_facts(pending / key)
+        for source in (() if db_only else safe_files(data / "assets")):
+            relative = source.relative_to(data / "assets")
+            if relative.as_posix() in media_exclusions:
+                facts = source.stat()
+                current = [facts.st_dev, facts.st_ino, facts.st_size, facts.st_mtime_ns, facts.st_ctime_ns]
+                if current == media_exclusions[relative.as_posix()]['fingerprint']:
+                    continue
+                del media_exclusions[relative.as_posix()]
+            output = assets / relative
+            output.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            key = f"assets/{relative.as_posix()}"
+            size, checksum = source.stat().st_size, digest(source)
+            prior = previous[0] / key if previous else None
+            prior_facts = previous[1]["files"].get(key) if previous else None
+            if prior and prior_facts == {"size": size, "sha256": checksum} and prior.is_file() and not prior.is_symlink() and digest(prior) == checksum:
+                os.link(prior, output)
+            else:
+                shutil.copy2(source, output)
+                if output.stat().st_size != size or digest(output) != checksum:
+                    raise ValueError(f"asset changed during backup: {relative}")
+                os.chmod(output, 0o600)
+            files[key] = {"size": size, "sha256": checksum}
+        manifest = {"format": FORMAT, "scope": scope, "created_at": datetime.now(timezone.utc).isoformat(),
+                    "media_scope": "selective" if media_exclusions else "full",
+                    "excluded_media": media_exclusions,
+                    "commit": commit, "source_data": str(data), "user_version": version,
+                    "table_counts": tables, "archives": archives, "files": files}
+        (pending / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+        os.chmod(pending / "manifest.json", 0o600)
+        verify(pending)
+        pending.rename(target)
+    except BaseException:
+        shutil.rmtree(pending)
+        raise
+    return target
+
+
+def prune(root: Path, keep: int) -> list[Path]:
+    if keep < 1:
+        raise ValueError("--keep must be at least 1")
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("backup destination must be a real directory")
+    candidates = {("full", "full"): [], ("full", "selective"): [], ("db-only", "full"): []}
+    for path in root.iterdir():
+        if not path.name.startswith("infoos-backup-"):
+            continue
+        try:
+            manifest = verified_manifest(path)
+            candidates[(manifest.get("scope", "full"), manifest.get("media_scope", "full"))].append(path)
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    removed = sorted(path for group in candidates.values() for path in sorted(group, reverse=True)[keep:])
+    for path in removed:
+        shutil.rmtree(path)
+    return removed
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    create_cmd = commands.add_parser("create")
+    create_cmd.add_argument("--dest", type=Path, required=True, help="backup root on another mounted disk")
+    create_cmd.add_argument("--db-only", action="store_true", help="only main and archive databases, no assets")
+    create_cmd.add_argument("--container", default="infoos-acceptance")
+    create_cmd.add_argument("--data-dir", type=Path, help="explicit data directory for offline testing")
+    create_cmd.add_argument("--commit", default="unknown", help="commit for offline data directory")
+    verify_cmd = commands.add_parser("verify")
+    verify_cmd.add_argument("--dest", type=Path, required=True, help="one snapshot directory")
+    prune_cmd = commands.add_parser("prune")
+    prune_cmd.add_argument("--dest", type=Path, required=True, help="backup root")
+    prune_cmd.add_argument("--keep", type=int, required=True)
+    args = parser.parse_args()
+    try:
+        if args.command == "create":
+            data, commit = (args.data_dir, args.commit) if args.data_dir else deployment.container_data_mount(args.container)
+            print(create(args.dest, data, commit, db_only=args.db_only))
+        elif args.command == "verify":
+            verify(args.dest)
+            print("backup verification passed")
+        else:
+            if args.keep < 1:
+                parser.error("--keep must be at least 1")
+            for path in prune(args.dest, args.keep):
+                print(f"removed {path}")
+    except (OSError, ValueError, sqlite3.Error, subprocess.CalledProcessError) as exc:
+        parser.exit(1, f"infoos-backup: {exc}\n")
+
+
+if __name__ == "__main__":
+    main()

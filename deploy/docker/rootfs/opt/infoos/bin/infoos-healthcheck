@@ -1,0 +1,88 @@
+#!/bin/sh
+set -eu
+
+fail() {
+  write_status unhealthy "$*"
+  echo "infoos-healthcheck: $*" >&2
+  exit 1
+}
+
+write_status() {
+  status="$1"
+  reason="${2:-}"
+  /opt/infoos/venv/bin/python - /tmp/infoos-health-status.json "$status" "$reason" <<'PY'
+import json
+import os
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+path = Path(sys.argv[1])
+payload = {
+    "status": sys.argv[2],
+    "reasons": [sys.argv[3]] if sys.argv[3] else [],
+    "checked_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+}
+temporary = path.with_suffix(".tmp")
+temporary.write_text(json.dumps(payload, ensure_ascii=False))
+os.replace(temporary, path)
+PY
+}
+
+/opt/infoos/bin/infoos-verify-runtime-capabilities \
+  || fail "runtime capability contract failed"
+
+curl --fail --silent http://127.0.0.1:8000/healthz >/dev/null || fail "web unavailable"
+worker_queues="public_fetch browser_fetch urgent_media card_pipeline gpu_asr maintenance_io"
+for queue_name in $worker_queues; do
+  worker_pattern="/opt/infoos/venv/bin/python -m backend.workers.task_worker .*--queue ${queue_name}"
+  # The reserved QR consumer cannot stand in for the general maintenance worker.
+  if [ "$queue_name" = "maintenance_io" ]; then
+    worker_pattern="${worker_pattern} --max-workers"
+  fi
+  pgrep -f "$worker_pattern" >/dev/null || fail "worker queue ${queue_name} unavailable"
+done
+pgrep -f 'backend.workers.task_worker .*--task-type auth_qr_check' >/dev/null \
+  || fail 'auth QR check worker unavailable'
+pgrep -f '/opt/infoos/venv/bin/python -m backend.workers.feishu_inbox' >/dev/null \
+  || fail 'Feishu inbox unavailable'
+pgrep -f '/opt/infoos/bin/infoos-scheduler-loop' >/dev/null || fail "scheduler unavailable"
+pgrep -f '/usr/local/lib/node_modules/@jackwener/opencli/dist/src/daemon.js' >/dev/null || fail "opencli daemon unavailable"
+pgrep -f '/opt/google/chrome/chrome --user-data-dir=/var/lib/infoos/state/chrome-profile' >/dev/null || fail "chrome unavailable"
+if [ "${INFOOS_EMBEDDED_PROXY_ENABLED:-0}" = "1" ]; then
+  pgrep -f '/usr/local/bin/mihomo .*infoos-proxy/config.yaml' >/dev/null \
+    || fail "embedded proxy unavailable"
+  curl --fail --silent --noproxy '*' \
+    "http://127.0.0.1:${INFOOS_EMBEDDED_PROXY_CONTROL_PORT:-19090}/version" >/dev/null \
+    || fail "embedded proxy control unavailable"
+fi
+
+now="$(date +%s)"
+window_start="$((now - 120))"
+for service_name in chrome infoos-web infoos-proxy infoos-scheduler opencli \
+  infoos-worker-public-fetch infoos-worker-browser-fetch infoos-worker-urgent-media \
+  infoos-worker-card-pipeline infoos-worker-gpu-asr \
+  infoos-worker-maintenance-io infoos-worker-auth-qr-check infoos-feishu-inbox; do
+  history_file="/tmp/infoos-${service_name}-starts"
+  if [ -f "$history_file" ]; then
+    starts="$(awk -v cutoff="$window_start" '$1 >= cutoff { count += 1 } END { print count + 0 }' "$history_file")"
+    [ "$starts" -le 5 ] || fail "${service_name} restarted ${starts} times in two minutes"
+  fi
+done
+
+db_path="${INFOOS_DATA_HOME:-/var/lib/infoos/data}/infoos.sqlite3"
+[ -r "$db_path" ] || fail "SQLite database unavailable"
+/opt/infoos/venv/bin/python - "$db_path" <<'PY' || fail "SQLite read check failed"
+import sqlite3
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1]).resolve()
+connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+try:
+    connection.execute("SELECT 1").fetchone()
+finally:
+    connection.close()
+PY
+
+write_status healthy ""

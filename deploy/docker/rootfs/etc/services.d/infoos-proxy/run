@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+
+enabled="${INFOOS_EMBEDDED_PROXY_ENABLED:-0}"
+case "$enabled" in
+  0)
+    exec /opt/infoos/bin/infoos-run-service infoos-proxy \
+      /bin/sh -c 'while :; do sleep 3600; done'
+    ;;
+  1)
+    ;;
+  *)
+    echo "INFOOS_EMBEDDED_PROXY_ENABLED must be 0 or 1" >&2
+    exit 2
+    ;;
+esac
+
+proxy_home="${INFOOS_EMBEDDED_PROXY_HOME:-/var/lib/infoos/state/proxy}"
+runtime_dir="${INFOOS_EMBEDDED_PROXY_RUNTIME_DIR:-/tmp/infoos-proxy}"
+control_port="${INFOOS_EMBEDDED_PROXY_CONTROL_PORT:-19090}"
+/opt/infoos/bin/infoos-prepare-embedded-proxy-config
+/usr/local/bin/mihomo -t -d "$proxy_home" -f "$runtime_dir/config.yaml"
+
+exec /opt/infoos/bin/infoos-run-service infoos-proxy \
+  /usr/local/bin/mihomo \
+    -d "$proxy_home" \
+    -f "$runtime_dir/config.yaml" \
+    -ext-ctl "127.0.0.1:${control_port}"

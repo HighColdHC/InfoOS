@@ -1,0 +1,37 @@
+#!/bin/sh
+set -eu
+
+fail() {
+  echo "infoos-runtime-capability-check: $*" >&2
+  exit 1
+}
+
+case "${INFOOS_FASTER_WHISPER_CUDA_ENABLED:-0}" in
+  1|true|TRUE|yes|YES|on|ON)
+    ;;
+  ""|0|false|FALSE|no|NO|off|OFF)
+    exit 0
+    ;;
+  *)
+    fail "INFOOS_FASTER_WHISPER_CUDA_ENABLED must be a boolean value"
+    ;;
+esac
+
+capability_file="${INFOOS_CUDA_ASR_CAPABILITY_FILE:-/opt/infoos/capabilities/cuda-asr}"
+image_capability="$(sed -n '1p' "$capability_file" 2>/dev/null || true)"
+[ "$image_capability" = "1" ] || \
+  fail "CUDA ASR is enabled but the image was built without CUDA ASR"
+
+python_executable="${INFOOS_PYTHON_EXECUTABLE:-/opt/infoos/venv/bin/python}"
+"$python_executable" - <<'PY' || fail "CUDA ASR provider unavailable"
+from backend.application.enrichment.asr.providers.faster_whisper import (
+    FasterWhisperCudaProvider,
+)
+
+availability = FasterWhisperCudaProvider().is_available()
+raise SystemExit(0 if availability.available else 1)
+PY
+
+command -v nvidia-smi >/dev/null 2>&1 || fail "NVIDIA GPU unavailable"
+nvidia-smi --query-gpu=name --format=csv,noheader >/dev/null 2>&1 || \
+  fail "NVIDIA GPU unavailable"

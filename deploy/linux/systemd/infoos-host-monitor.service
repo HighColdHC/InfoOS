@@ -1,0 +1,41 @@
+[Unit]
+Description=Durable InfoOS host hardware and power heartbeat
+After=local-fs.target infoos-host-forensics.service
+Requires=infoos-host-forensics.service
+RequiresMountsFor=/var/lib /var/log
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/infoos-host-monitor run --interval 15
+Restart=always
+RestartSec=3
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+PrivateDevices=yes
+PrivateNetwork=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectProc=invisible
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+UMask=0027
+ReadWritePaths=/var/lib/infoos-host-monitor /var/log/infoos-hardware-monitor
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

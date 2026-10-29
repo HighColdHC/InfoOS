@@ -1,0 +1,13 @@
+.knowledge-reader { overflow-wrap: anywhere; }
+.knowledge-reader section { margin-block: 2rem; }
+.knowledge-reader__fields > div { padding-block: 0.8rem; border-bottom: 1px solid var(--border-subtle); }
+.knowledge-reader__fields dt { font-weight: 650; }
+.knowledge-reader__fields dd { margin: 0.5rem 0 0; white-space: pre-wrap; }
+.knowledge-reader__fields dd ul { margin: 0; padding-left: 1.3rem; }
+.knowledge-reader__evidence { padding-block: 1rem; }
+.knowledge-reader__evidence blockquote { margin-inline: 0; padding-inline: 1rem; border-left: 3px solid currentColor; }
+.knowledge-reader__conflict { font-weight: 650; }
+.knowledge-reader__stock { padding-block: 1rem; }
+.knowledge-reader .brief-reader__item { grid-template-columns: minmax(0, 1fr); }
+.knowledge-reader__section-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; }
+.knowledge-reader__section-heading > a { font-size: var(--font-size-sm); }

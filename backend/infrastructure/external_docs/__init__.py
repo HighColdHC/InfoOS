@@ -1,0 +1,1 @@
+"""External document acquisition adapters."""

@@ -1,0 +1,74 @@
+.collector-shell .collector-source-run-table { min-width: 0; table-layout: fixed; }
+.collector-shell .collector-source-run-table th, .collector-shell .collector-source-run-table td { white-space: normal; overflow-wrap: anywhere; padding: 10px; }
+.collector-shell .collector-source-run-table th:first-child { width: 23%; }
+.collector-shell .collector-source-run-table th:nth-child(2) { width: 17%; }
+.collector-shell .collector-source-run-table th:nth-child(3) { width: 19%; }
+.collector-shell .collector-source-run-table th:nth-child(4) { width: 16%; }
+.collector-shell .collector-source-run-table th:nth-child(5) { width: 17%; }
+.collector-shell .collector-source-run-table td:first-child { min-width: 0; }
+.collector-shell .collector-source-run-table td code { max-width: 100%; white-space: nowrap; }
+.collector-shell .collector-source-run-table th:last-child, .collector-shell .collector-source-run-table td:last-child { position: sticky; right: 0; width: 76px; z-index: 1; background: var(--color-surface); box-shadow: var(--shadow-sm); }
+.collector-shell .collector-source-run-table tbody tr { cursor: pointer; }
+.collector-shell .collector-source-run-table tbody tr:hover td { background: var(--color-surface-soft); }
+.collector-shell .collector-source-run-table .platform-mark { display: inline-flex; }
+.collector-shell .collector-run-mini { display: flex; gap: 4px; margin-top: 8px; }
+.collector-shell .collector-run-mini span { border-bottom: 3px solid var(--color-border); padding-bottom: 3px; font-size: var(--font-size-xs); }
+.collector-shell .collector-run-mini .is-complete { color: var(--color-success); border-color: var(--color-success); }
+.collector-shell .collector-run-mini .is-failed, .collector-shell .collector-run-mini .is-blocked { color: var(--color-danger); border-color: var(--color-danger); }
+.collector-shell .collector-run-mini .is-running { color: var(--color-accent); border-color: var(--color-accent); }
+.collector-shell .collector-source-run-table .collector-run-interrupted { color: var(--color-danger); }
+.modal-card .collector-run-pipeline { padding: 16px; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-lg); background: var(--color-surface-soft); }
+.modal-card .collector-run-pipeline h3, .modal-card .collector-run-interruption h3 { margin: 0; }
+.modal-card .collector-run-pipeline p { color: var(--color-text-muted); font-size: var(--font-size-xs); margin: 6px 0 14px; }
+.modal-card .collector-pipeline-steps { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; padding: 0; margin: 0; list-style: none; }
+.modal-card .collector-pipeline-steps li { min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 8px; border-top: 3px solid var(--color-border); }
+.modal-card .collector-pipeline-number { display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--radius-pill); background: var(--color-surface); color: var(--color-text-muted); }
+.modal-card .collector-pipeline-steps strong, .modal-card .collector-pipeline-steps small, .modal-card .collector-pipeline-steps li div > span { display: block; overflow-wrap: anywhere; }
+.modal-card .collector-pipeline-steps li div > span, .modal-card .collector-pipeline-steps small { font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: 4px; }
+.modal-card .collector-pipeline-steps .is-complete { border-color: var(--color-success); }
+.modal-card .collector-pipeline-steps .is-complete .collector-pipeline-number { color: var(--color-success); }
+.modal-card .collector-pipeline-steps .is-running { border-color: var(--color-accent); }
+.modal-card .collector-pipeline-steps .is-failed, .modal-card .collector-pipeline-steps .is-blocked { border-color: var(--color-danger); background: var(--color-danger-soft); border-radius: var(--radius-sm); }
+.modal-card .collector-pipeline-steps .is-failed strong, .modal-card .collector-pipeline-steps .is-blocked strong { color: var(--color-danger); }
+.modal-card .collector-run-interruption { padding: 16px; border: 1px solid var(--color-danger); border-radius: var(--radius-lg); background: var(--color-danger-soft); }
+.modal-card .collector-run-interruption > div { display: grid; gap: 8px; padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--color-border); }
+.modal-card .collector-run-interruption h3 { color: var(--color-danger); }
+.modal-card .collector-run-interruption p { margin: 6px 0; overflow-wrap: anywhere; }
+.modal-card .collector-run-interruption small { color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.modal-card .collector-run-interruption button { justify-self: start; }
+.modal-card .collector-run-complete { padding: 14px; color: var(--color-success); border: 1px solid var(--color-success); border-radius: var(--radius-md); }
+.modal-card .collector-pipeline-steps.is-mini { grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 10px; }
+.modal-card .collector-pipeline-steps.is-mini li { padding: 6px; font-size: var(--font-size-xs); }
+.modal-card .collector-pipeline-steps.is-mini .collector-pipeline-number { display: none; }
+.modal-card .collector-item-stages { display: grid; gap: 8px; }
+.modal-card .collector-item-stage { min-width: 0; padding: 12px; background: var(--color-surface-soft); border-radius: var(--radius-md); }
+.modal-card .collector-item-stage strong, .modal-card .collector-item-stage small, .modal-card .collector-item-stage code { display: block; overflow-wrap: anywhere; }
+.modal-card .collector-item-stage small { margin-top: 6px; color: var(--color-text-muted); }
+.modal-card .collector-item-stage.is-failed, .modal-card .collector-item-stage.is-blocked { border-left: 3px solid var(--color-danger); background: var(--color-danger-soft); }
+.modal-card .collector-item-stage button, .modal-card .collector-task-trace-overview button, .modal-card .collector-task-evidence button, .modal-card .collector-task-finalize button, .modal-card .collector-task-failure button { min-height: 36px; padding: 6px 10px; color: var(--color-accent); border: 0; border-radius: var(--radius-sm); background: var(--color-surface); cursor: pointer; }
+.modal-card .collector-task-trace button:focus-visible, .modal-card .collector-task-trace summary:focus-visible { outline: 3px solid var(--color-accent-ring); outline-offset: 2px; }
+.modal-card .collector-task-trace summary { min-height: 36px; cursor: pointer; }
+.modal-card .collector-task-trace .is-located { outline: 3px solid var(--color-accent-ring); outline-offset: -3px; scroll-margin: 20px; }
+.modal-card .collector-task-item small { overflow-wrap: anywhere; }
+.modal-card .collector-task-trace > section[aria-label="原始证据"] { display: grid; gap: 14px; }
+@media (max-width: 720px) {
+  .collector-shell .collector-source-run-table { min-width: 850px; }
+  .modal-card .collector-pipeline-steps, .modal-card .collector-pipeline-steps.is-mini { grid-template-columns: 1fr; }
+  .modal-card .collector-pipeline-steps li { flex-direction: row; border-top: 0; border-left: 3px solid var(--color-border); }
+  .modal-card .collector-pipeline-steps li.is-complete { border-color: var(--color-success); }
+  .modal-card .collector-pipeline-steps li.is-failed, .modal-card .collector-pipeline-steps li.is-blocked { border-color: var(--color-danger); }
+  .modal-card .collector-pipeline-steps li.is-running { border-color: var(--color-accent); }
+  .modal-card .collector-task-item-toggle { min-width: 0; }
+  .modal-card .collector-task-item-toggle > span { min-width: 0; }
+}
+
+.collector-shell .collector-run-mini .is-retrying { color: var(--color-warning); border-color: var(--color-warning); }
+.collector-shell .collector-source-run-table .collector-run-retrying { color: var(--color-warning); }
+.modal-card .collector-pipeline-steps .is-retrying { border-color: var(--color-warning); background: var(--color-warning-soft); border-radius: var(--radius-sm); }
+.modal-card .collector-pipeline-steps .is-retrying strong { color: var(--color-warning); }
+.modal-card .collector-run-interruption.is-retrying { border-color: var(--color-warning); background: var(--color-warning-soft); }
+.modal-card .collector-run-interruption.is-retrying h3 { color: var(--color-warning); }
+.modal-card .collector-item-stage.is-retrying { border-left: 3px solid var(--color-warning); background: var(--color-warning-soft); }
+.modal-card .collector-pipeline-steps li > button { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: 100%; min-height: 36px; padding: 4px; border: 0; border-radius: var(--radius-sm); background: transparent; color: inherit; text-align: left; font: inherit; cursor: pointer; }
+.modal-card .collector-pipeline-steps li > button[aria-expanded="true"] { background: var(--color-surface); box-shadow: var(--shadow-sm); }
+.modal-card .collector-pipeline-steps li.is-not_executed { border-color: var(--color-border); background: transparent; }

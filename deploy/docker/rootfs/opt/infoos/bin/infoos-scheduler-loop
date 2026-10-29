@@ -1,0 +1,25 @@
+#!/bin/sh
+set -eu
+
+interval="${INFOOS_SCHEDULER_INTERVAL_SECONDS:-900}"
+case "$interval" in
+  ''|*[!0-9]*)
+    echo "INFOOS_SCHEDULER_INTERVAL_SECONDS must be a positive integer" >&2
+    exit 2
+    ;;
+esac
+if [ "$interval" -lt 1 ]; then
+  echo "INFOOS_SCHEDULER_INTERVAL_SECONDS must be greater than zero" >&2
+  exit 2
+fi
+
+cd /opt/infoos/app
+/opt/infoos/venv/bin/python -c 'from backend.infrastructure.storage.bootstrap import initialize_runtime_storage; initialize_runtime_storage(".")'
+while true; do
+  /opt/infoos/venv/bin/python -m backend.workers.scheduler.cycle \
+    --base-dir . \
+    --startup-ready \
+    --max-attempts "${INFOOS_MAX_ATTEMPTS:-2}"
+  sleep "$interval" &
+  wait "$!"
+done

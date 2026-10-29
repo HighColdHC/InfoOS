@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+# Root-only host orchestration. Only a newly-created copy directory is bind-mounted.
+set -euo pipefail
+umask 077
+
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+work_dir="/var/tmp/infoos-maint-rehearsal-$stamp"
+recovery_point=""
+image=""
+keep=0
+keywords=()
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/infoos-maintenance-rehearsal [options]
+  --recovery-point DIR  Default: newest /var/backups/infoos/*-sqlite directory
+  --image TAG          Default: infoos-acceptance's configured image (local only)
+  --work-dir DIR       New directory; default /var/tmp/infoos-maint-rehearsal-<UTC>
+  --keep               Keep copy/tool logs; default removes work directory
+  --keyword TERM       Repeat exactly three times (3+ chars each); default auto-pick
+
+Run as root on the Linux Appliance host, from a reviewed checkout containing
+scripts/ and backend/infrastructure/storage/. No service stop, exec, live-volume
+mount, network, deletion of task rows or deployment. JSON report is retained at
+<work-dir>.report.json; stdout prints that path. A failure stops all further steps.
+SQLite-only recovery lacks cold archives: review-04 candidates are upper bounds.
+EOF
+}
+fail() {
+  printf 'infoos-maintenance-rehearsal: %s\n' "$*" >&2
+  if [[ -n "${meta_dir:-}" ]]; then printf '%s\n' "$*" >"$meta_dir/failure.txt"; fi
+  exit 2
+}
+while (( $# )); do
+  case "$1" in
+    --recovery-point|--image|--work-dir|--keyword)
+      (( $# >= 2 )) && [[ -n "$2" ]] || fail "missing value for $1"
+      case "$1" in
+        --recovery-point) recovery_point="$2" ;;
+        --image) image="$2" ;;
+        --work-dir) work_dir="$2" ;;
+        --keyword) keywords+=("$2") ;;
+      esac
+      shift 2 ;;
+    --keep) keep=1; shift ;;
+    --help|-h) usage; exit 0 ;;
+    *) fail "unknown argument: $1" ;;
+  esac
+done
+[[ "$(uname -s)" == Linux && "$EUID" == 0 ]] || fail 'requires Linux root'
+for tool in docker zstd python3 realpath df find sort wc date tail; do
+  command -v "$tool" >/dev/null 2>&1 || fail "missing command: $tool"
+done
+(( ${#keywords[@]} == 0 || ${#keywords[@]} == 3 )) || fail 'supply exactly three --keyword values'
+for word in "${keywords[@]}"; do
+  [[ ${#word} -ge 3 ]] || fail 'each keyword needs at least 3 characters'
+done
+started_ns="$(date +%s%N)"
+docker info >/dev/null 2>&1 || fail 'Docker daemon is unavailable'
+
+# Metadata only: do not open any file inside a Docker volume or container mount.
+blocked_roots=(/var/lib/docker)
+blocked_roots+=("$(docker info --format '{{.DockerRootDir}}')")
+volume_ids="$(docker volume ls --quiet)"
+if [[ -n "$volume_ids" ]]; then
+  mapfile -t ids <<<"$volume_ids"
+  mounts="$(docker volume inspect --format '{{.Mountpoint}}' "${ids[@]}")"
+  while IFS= read -r root; do
+    [[ -n "$root" ]] || fail 'cannot establish a Docker volume mountpoint'
+    blocked_roots+=("$root")
+  done <<<"$mounts"
+fi
+container_ids="$(docker container ls --all --quiet)"
+if [[ -n "$container_ids" ]]; then
+  mapfile -t ids <<<"$container_ids"
+  mounts="$(docker inspect --format '{{range .Mounts}}{{println .Source}}{{end}}' "${ids[@]}")"
+  while IFS= read -r root; do
+    [[ -z "$root" ]] || blocked_roots+=("$root")
+  done <<<"$mounts"
+fi
+check_location() {
+  local path="$1" root
+  [[ "$path" == /* && "$path" != *','* && "$path" != *$'\n'* ]] || fail 'paths must be absolute, without commas/newlines'
+  for root in "${blocked_roots[@]}"; do
+    root="$(realpath -m -- "$root")"
+    [[ "$path" != "$root" && "$path" != "${root%/}/"* ]] || fail "forbidden Docker/live mount path: $path"
+  done
+}
+[[ "$work_dir" == /* && ! -e "$work_dir" && ! -L "$work_dir" ]] || fail '--work-dir must be a new absolute directory'
+work_dir="$(realpath -m -- "$work_dir")"
+check_location "$work_dir"
+parent="$(dirname "$work_dir")"
+[[ -d "$parent" ]] || fail 'work directory parent must already exist'
+report="$work_dir.report.json"
+[[ ! -e "$report" && ! -L "$report" ]] || fail 'report path already exists'
+if [[ -z "$recovery_point" ]]; then
+  candidates="$(find /var/backups/infoos -mindepth 1 -maxdepth 1 -type d -name '*-sqlite' | sort --reverse)"
+  recovery_point="${candidates%%$'\n'*}"
+fi
+[[ -n "$recovery_point" ]] || fail 'no SQLite recovery point found'
+recovery_point="$(realpath -e -- "$recovery_point")"
+check_location "$recovery_point"
+[[ "$work_dir" != "$recovery_point/"* ]] || fail 'work directory cannot be inside the recovery point'
+for name in infoos.sqlite3.zst receipt.json; do
+  [[ -f "$recovery_point/$name" && ! -L "$recovery_point/$name" ]] || fail "missing/nonregular recovery file: $name"
+done
+if [[ -z "$image" ]]; then
+  [[ "$(docker inspect --format '{{.State.Running}}' infoos-acceptance)" == true ]] || fail 'default container is not running; supply --image'
+  image="$(docker inspect --format '{{.Config.Image}}' infoos-acceptance)"
+fi
+image_id="$(docker image inspect --format '{{.Id}}' "$image")"
+[[ -n "$image_id" ]] || fail 'image must exist locally'
+# Base images can declare VOLUME (for example /config). Mask those with anonymous
+# in-memory filesystems, so Docker does not create or attach any data volume.
+image_tmpfs=()
+image_volumes="$(docker image inspect --format '{{range $path, $_ := .Config.Volumes}}{{println $path}}{{end}}' "$image_id")"
+while IFS= read -r destination; do
+  [[ -n "$destination" ]] || continue
+  [[ "$destination" == /* && "$destination" != / && "$destination" != /rehearsal* ]] || fail 'unsupported image VOLUME destination'
+  image_tmpfs+=(--tmpfs "$destination:rw,nosuid,nodev")
+done <<<"$image_volumes"
+
+mkdir -m 0700 -- "$work_dir"
+mkdir -- "$work_dir/.rehearsal"
+meta_dir="$work_dir/.rehearsal"
+helper="$repo_dir/scripts/infoos-maintenance-rehearsal.py"
+failed_step=preflight
+active_container=""
+step_index=0
+python3 - "$meta_dir/context.json" "$started_ns" "$recovery_point" "$image" "$image_id" "$work_dir" "$keep" <<'PY'
+import json, sys
+from pathlib import Path
+dest, started, recovery, image, image_id, work, keep = sys.argv[1:]
+Path(dest).write_text(json.dumps(dict(started_ns=int(started), recovery_point=recovery,
+    image=image, image_id=image_id, work_dir=work, keep=bool(int(keep)))))
+PY
+finish() {
+  local rc=$? report_rc=0 remaining
+  trap - EXIT HUP INT TERM
+  if [[ -n "$active_container" ]]; then
+    # This name is assigned only to this run's disposable container.
+    if remaining="$(docker container ls --all --quiet --filter "name=^/$active_container$")"; then
+      if [[ -n "$remaining" ]] && ! docker rm --force "$active_container" >/dev/null 2>&1; then keep=1; fi
+    else
+      keep=1
+    fi
+    if (( keep == 1 )); then
+      printf 'Retaining copy (requested or disposable-container cleanup unconfirmed).\n' >&2
+      : >"$meta_dir/retained.txt"
+    fi
+  fi
+  python3 "$helper" report "$work_dir" "$report" "$rc" "$failed_step" >&2 || report_rc=$?
+  if (( report_rc == 0 )); then
+    if (( keep == 0 )); then rm -rf -- "$work_dir"; fi
+    printf '%s\n' "$report"
+  else
+    printf 'Report failed; retained evidence at %s\n' "$work_dir" >&2
+    rc=1
+  fi
+  exit "$rc"
+}
+trap finish EXIT
+trap 'exit 130' INT
+trap 'exit 143' HUP TERM
+
+run_step() {
+  local name="$1" start end rc=0 prefix
+  shift
+  failed_step="$name"
+  step_index=$((step_index + 1))
+  printf -v prefix '%s/%02d-%s' "$meta_dir" "$step_index" "$name"
+  start="$(date +%s%N)"
+  active_container="infoos-maint-rehearsal-$stamp-$$-$step_index"
+  printf '{"name":"%s","started_ns":%s,"ended_ns":%s,"exit_code":null}\n' "$name" "$start" "$start" >"$prefix.meta.json"
+  printf 'Running %s ...\n' "$name" >&2
+  if "$@" >"$prefix.stdout" 2>"$prefix.stderr"; then rc=0; else rc=$?; fi
+  end="$(date +%s%N)"
+  printf '{"name":"%s","started_ns":%s,"ended_ns":%s,"exit_code":%s}\n' "$name" "$start" "$end" "$rc" >"$prefix.meta.json"
+  (( rc == 0 )) || { cat "$prefix.stderr" >&2; exit "$rc"; }
+}
+
+# Stream once before allocating the copy: works even when zstd frame size is unknown.
+# It also checks the compressed stream checksum without mounting the recovery dir.
+uncompressed_bytes="$(zstd -q -dc -- "$recovery_point/infoos.sqlite3.zst" | wc -c)"
+uncompressed_bytes="${uncompressed_bytes//[[:space:]]/}"
+[[ "$uncompressed_bytes" =~ ^[1-9][0-9]*$ ]] || fail 'invalid decompressed size'
+free_bytes="$(df -B1 --output=avail "$parent" | tail -n 1)"
+free_bytes="${free_bytes//[[:space:]]/}"
+python3 - "$meta_dir/context.json" "$uncompressed_bytes" "$free_bytes" <<'PY'
+import json, sys, time
+from pathlib import Path
+p = Path(sys.argv[1]); d = json.loads(p.read_text())
+d.update(uncompressed_bytes=int(sys.argv[2]), preflight_free_bytes=int(sys.argv[3]),
+         preflight_wall_seconds=round((time.time_ns()-d['started_ns'])/1e9, 3))
+p.write_text(json.dumps(d))
+PY
+(( free_bytes >= uncompressed_bytes * 3 )) || fail "need at least $((uncompressed_bytes * 3)) free bytes; have $free_bytes"
+mkdir -p -- "$work_dir/assets/raw-media" "$work_dir/tmp" \
+  "$work_dir/tools/scripts" "$work_dir/tools/backend/infrastructure/storage"
+cp -- "$recovery_point/receipt.json" "$work_dir/receipt.json"
+for name in infoos-maintenance-rehearsal.py infoos-task-inventory.py; do
+  cp -- "$repo_dir/scripts/$name" "$work_dir/tools/scripts/$name"
+done
+for name in maintenance_rehearsal.py task_inventory.py; do
+  cp -- "$repo_dir/backend/infrastructure/storage/$name" "$work_dir/tools/backend/infrastructure/storage/$name"
+done
+
+container_python() {
+  local access="$1"; shift
+  local mount="type=bind,src=$work_dir,dst=/rehearsal"
+  [[ "$access" == rw ]] || mount+=",readonly"
+  local rc=0
+  docker run --rm --pull never --name "$active_container" -i --network none \
+    --read-only --user 0:0 --cap-drop ALL --security-opt no-new-privileges \
+    --no-healthcheck --workdir /opt/infoos/app \
+    --env PYTHONDONTWRITEBYTECODE=1 --env TMPDIR=/rehearsal/tmp \
+    --env INFOOS_DATA_HOME=/rehearsal --env INFOOS_STATE_HOME=/rehearsal/state \
+    "${image_tmpfs[@]}" --mount "$mount" --entrypoint /opt/infoos/venv/bin/python "$image_id" "$@" || rc=$?
+  if (( rc == 0 )); then active_container=""; fi
+  return "$rc"
+}
+copy_stream() {
+  zstd -q -dc -- "$recovery_point/infoos.sqlite3.zst" | container_python rw \
+    /rehearsal/tools/scripts/infoos-maintenance-rehearsal.py unpack /rehearsal/infoos.sqlite3 "$uncompressed_bytes"
+}
+tool=/rehearsal/tools/scripts/infoos-maintenance-rehearsal.py
+run_step receipt container_python ro "$tool" receipt /rehearsal/receipt.json
+run_step decompress copy_stream
+run_step baseline container_python ro "$tool" stats /rehearsal/infoos.sqlite3
+baseline="$(basename "$meta_dir")/03-baseline.stdout"
+run_step raw_media container_python rw scripts/externalize-raw-media.py --db /rehearsal/infoos.sqlite3 \
+  --apply --services-stopped --backup-verified
+run_step inventory container_python ro /rehearsal/tools/scripts/infoos-task-inventory.py /rehearsal/infoos.sqlite3
+keyword_args=()
+for word in "${keywords[@]}"; do keyword_args+=(--keyword "$word"); done
+run_step fts container_python rw scripts/rebuild-card-text-search.py --db /rehearsal/infoos.sqlite3 --apply "${keyword_args[@]}"
+run_step final container_python ro "$tool" stats /rehearsal/infoos.sqlite3 --baseline "/rehearsal/$baseline"
+failed_step=""

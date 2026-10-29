@@ -5,7 +5,7 @@ import sqlite3
 import pytest
 
 from backend.infrastructure.storage.database import default_database_path
-from backend.infrastructure.storage.migrations.runner import migrate_database
+from backend.infrastructure.storage.migrations.runner import LATEST_VERSION, migrate_database
 from tests.infoos.storage.migration_test_helpers import drop_v21_schema
 from tests.infoos.test_agent_evaluations import seed
 from backend.infrastructure.storage.card_evaluations import CardEvaluationRepository
@@ -30,7 +30,7 @@ def test_upgrade_rollback_old_rows_concurrent_start_and_repeat(tmp_path):
     with sqlite3.connect(path) as conn:
         assert conn.execute("pragma user_version").fetchone()[0] == 20
     with ThreadPoolExecutor(max_workers=2) as pool:
-        assert all(report.after_version == 21 for report in pool.map(migrate_database, [path, path]))
+        assert all(report.after_version == LATEST_VERSION for report in pool.map(migrate_database, [path, path]))
     assert migrate_database(path).batches == ()
     evaluation = CardEvaluationRepository(tmp_path).latest_for_card("card-1")
     assert evaluation["prompt_version"] == "rubric_v1" and evaluation["exclusion"] is None and evaluation["extract_kinds"] is None

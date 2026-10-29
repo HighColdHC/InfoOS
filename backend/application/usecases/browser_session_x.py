@@ -134,7 +134,7 @@ def _probe_x_readiness(executable: str, *, timeout_seconds: int = 30, use_lock: 
     if probe.returncode == 0:
         # No body we recognize but the process succeeded — be conservative.
         x_login["status"] = "failed"
-        x_login["error"] = "X profile probe returned no user identity"
+        x_login["error"] = "X 登录检查未返回账号信息"
         return x_login
 
     if any(marker in combined for marker in ("auth_required", "not logged in", "no ct0 cookie",
@@ -153,8 +153,7 @@ def _apply_x_readiness_probe(result: dict, executable: str, *, timeout_seconds: 
         result["status"] = "ready"
         result["issues"] = []
         return True
-    detail = x_login.get("error") or x_login["status"]
-    result["issues"].append(f"X readiness probe failed: {detail}")
+    result["issues"].append("X 登录状态检查未通过，请检查专用浏览器会话")
     result["status"] = "blocked"
     return False
 
@@ -183,14 +182,14 @@ def _launch_browser(
     else:
         del browser_app
         result["browser_launch_method"] = "missing_launcher"
-        result["issues"].append("Dedicated InfoOS browser launcher is missing")
+        result["issues"].append("专用浏览器启动器不存在")
         result["browser_opened"] = False
         return
     try:
         subprocess.run(cmd, capture_output=True, text=True, timeout=10, check=False)
         result["browser_opened"] = True
-    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
-        result["issues"].append(f"Could not launch browser session: {exc}")
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        result["issues"].append("无法启动专用浏览器会话")
         result["browser_opened"] = False
 
 
@@ -234,7 +233,7 @@ def _restart_opencli_daemon(executable: str, result: dict) -> None:
             return
         subprocess.Popen([resolved_executable, "daemon", "--start"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except (FileNotFoundError, OSError):
-        result["issues"].append("Could not restart OpenCLI daemon")
+        result["issues"].append("无法重启 OpenCLI 后台服务")
     except subprocess.TimeoutExpired:
         subprocess.Popen([resolved_executable, "daemon", "--start"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(2)

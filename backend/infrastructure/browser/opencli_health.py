@@ -17,12 +17,13 @@ STATUS_TIMEOUT_SECONDS = 10
 PROFILE_LIST_TIMEOUT_SECONDS = 10
 
 
-def refresh(executable: str = "opencli") -> dict:
+def refresh(executable: str = "opencli", *, include_profiles: bool = True) -> dict:
     """Refresh OpenCLI health. Returns {
         daemon_running, daemon_version, extension_connected,
         doctor_status, profiles: [{alias, version, status}],
         last_checked_at, hint
-    }"""
+    }. Set include_profiles=False for the daemon's current connection only.
+    """
     resolved_executable = resolve_opencli_executable(executable)
     try:
         status_proc = subprocess.run(
@@ -42,6 +43,13 @@ def refresh(executable: str = "opencli") -> dict:
         }
 
     status = parse_status_output(status_proc.stdout + status_proc.stderr)
+    if not include_profiles:
+        return {
+            **status,
+            "profiles": [],
+            "last_checked_at": utc_now_offset(),
+            "hint": "daemon_status_failed" if status_proc.returncode else None,
+        }
     profiles = []
     try:
         profile_proc = subprocess.run(
@@ -78,10 +86,12 @@ def parse_status_output(output: str) -> dict:
         ("[ok] connectivity" in lower and "[fail] connectivity" not in lower)
         or "extension: connected" in lower
     )
+    extension_version = re.search(r"Extension: connected \(v([\d.]+)\)", output)
     return {
         "daemon_running": daemon_running,
         "daemon_version": _extract_daemon_version(output),
         "extension_connected": extension_connected,
+        "extension_version": extension_version.group(1) if extension_version else None,
         "doctor_status": "ok" if (daemon_running and extension_connected) else "failed",
     }
 

@@ -385,8 +385,7 @@ def _status_explanation(
     if latest_run and latest_run["status"] == "success" and readiness["status"] == "ready":
         return "最近一次采集成功。"
     if latest_run and latest_run["status"] == "failed":
-        error = latest_run["error_summary"] or "未知错误"
-        return f"最近一次采集失败：{error}"
+        return "最近一次采集失败，请查看运行追踪了解原因。"
     issues = readiness["issues"]
     if issues:
         return issues[0]

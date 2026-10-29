@@ -2,6 +2,12 @@
 
 B1 起，`backend/infrastructure/storage/migrations/` 是 SQLite 结构与历史回填的迁移来源。已发布的 `v0001_core.sql`、`v0001_collector.sql` 和各编号迁移不可改写；旧的 `storage/schema.sql` 与 `storage/schema_collector.sql` 已由冻结基线取代。CRUD 与事务规则仍见 `sqlite-crud-playbook.md`。
 
+## v0022：退役内置 LLM 熔断清理
+
+`v0022_retire_llm_circuits.sql` 删除全部 `provider` 熔断，以及已退役的 `scys` / `wechat` 平台熔断。每条删除在同一迁移事务内追加一条 `task_events.runtime_circuit_retired` 审计，保存 scope、原状态、原因代码和失败次数，不保存配置或凭据。版本提交与审计、删除一起回滚；重复启动无重复审计。历史任务事件保持可读，不因旧 provider 事件把当前状态判为异常。
+
+状态读取不再使用内置 LLM provider；`providers` 响应字段保留为空列表以兼容客户端。运行保护列表只展示 registry 当前平台及按来源隔离的 RSS 熔断。平台采集熔断、资源租约、Webhook 保护均保留。无新表或索引；每条删除多写一条审计及现有事件索引。旧 `state/config/llm.json` 不由迁移读取或删除。发布须使用 `--update-kind data-migration`，先在一致性备份副本上预演并保留恢复点；旧镜像不能直接打开 v22 数据卷。
+
 ## 新增版本
 
 1. 在 `migrations/` 追加连续编号的 `vNNNN_name.sql`（DDL 或无需条件编排的数据更新）或 `vNNNN_name.py`（需条件判断、历史数据回填），并将运行器的 `LATEST_VERSION` 推进到该编号。不要在已发布版本中补写新定义。

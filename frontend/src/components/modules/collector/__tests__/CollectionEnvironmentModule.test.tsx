@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   checkPlatformAccount,
+  checkOpencliBridge,
   fetchCollectionEnvironment,
   launchDedicatedChrome,
   launchPlatformLogin,
@@ -20,6 +21,7 @@ vi.mock("../../../../lib/api/collectionEnvironment", () => ({
   fetchCollectionEnvironment: vi.fn(),
   launchDedicatedChrome: vi.fn(),
   checkPlatformAccount: vi.fn(),
+  checkOpencliBridge: vi.fn(),
   launchPlatformLogin: vi.fn(),
 }));
 
@@ -52,7 +54,7 @@ function snapshot(statusOverride?: Partial<Record<string, string>>): CollectionE
     snapshot_at: "2026-07-16T08:00:00Z",
     runtime_circuits: [],
     pending_auth_recoveries: [],
-    components: componentNames.map((name, index) => ({ id: index === 0 ? "dedicated_chrome" : `component-${index}`, name, status: index === 6 ? "configured" : "installed", version: index === 0 ? "126.0" : `1.${index}`, is_chrome: index === 0, action: index === 0 ? "launch" : null })),
+    components: componentNames.map((name, index) => ({ id: index === 0 ? "dedicated_chrome" : index === 1 ? "opencli_bridge" : `component-${index}`, name, status: index === 6 ? "configured" : "installed", version: index === 0 ? "126.0" : `1.${index}`, is_chrome: index === 0, action: index === 0 ? "launch" : null })),
     accounts: platforms.map(([platform, label, status, browser_capability, session_id, affected_source_count]) => ({
       platform, label, status: statusOverride?.[platform] ?? status, browser_capability, session_id,
       last_checked_at: platform === "douyin" ? null : "2026-07-16T08:30:00Z", affected_source_count,
@@ -120,6 +122,25 @@ describe("CollectionEnvironmentModule", () => {
     vi.mocked(verifyAuthRecovery).mockResolvedValue({ ok: false, verification: { status: "failed", code: "platform_session_not_ready", checked_at: "2026-07-26T08:30:00Z" }, incident: recoveryIncident() });
     vi.mocked(verifyPendingAuthRecovery).mockResolvedValue({ ok: true, verification: { status: "passed", method: "platform_session", checked_at: "2026-07-27T08:30:00Z" }, incident: recoveryIncident({ status: "resolved" }) });
     onStartSetup.mockClear();
+  });
+
+  it("checks Bridge only on click and refreshes its saved connection result", async () => {
+    const user = userEvent.setup();
+    renderModule();
+    const button = await screen.findByRole("button", { name: "检查 Bridge" });
+    expect(checkOpencliBridge).not.toHaveBeenCalled();
+    const pending = deferred<{ ok: boolean }>();
+    vi.mocked(checkOpencliBridge).mockReturnValue(pending.promise);
+    const checked = snapshot();
+    checked.components[1] = { ...checked.components[1], status: "connected", version: "1.0.26", last_checked_at: "2026-10-28T12:00:00Z" };
+    vi.mocked(fetchCollectionEnvironment).mockResolvedValue(checked);
+    await user.click(button);
+    expect(screen.getByRole("button", { name: "检查中…" })).toBeDisabled();
+    pending.resolve({ ok: true });
+    expect(await screen.findByText("已连接")).toBeInTheDocument();
+    expect(screen.getByText("上次检查 2026-10-28T12:00:00Z")).toBeInTheDocument();
+    expect(checkOpencliBridge).toHaveBeenCalledTimes(1);
+    expect(launchDedicatedChrome).not.toHaveBeenCalled();
   });
 
   it("loads an auth recovery from the deep link and opens its container console", async () => {
@@ -192,12 +213,13 @@ describe("CollectionEnvironmentModule", () => {
     expect(screen.getByRole("status")).toHaveTextContent("下次启动或修复采集会话时生效");
   });
 
-  it("renders exactly eight compact component cards, only one component action, and six backend accounts with both actions", async () => {
+  it("renders exactly eight compact component cards, Chrome and Bridge actions, and six backend accounts with both actions", async () => {
     renderModule();
     const components = await screen.findByRole("region", { name: "系统组件" });
     componentNames.forEach((name) => expect(within(components).getByText(name)).toBeInTheDocument());
     expect(within(components).getAllByRole("article")).toHaveLength(8);
-    expect(within(components).getAllByRole("button")).toHaveLength(1);
+    expect(within(components).getAllByRole("button")).toHaveLength(2);
+    expect(within(components).getByRole("button", { name: "检查 Bridge" })).toBeInTheDocument();
     expect(within(components).getByRole("button", { name: "打开专用 Chrome" })).toBeInTheDocument();
 
     const table = screen.getByRole("table", { name: "平台账号" });

@@ -80,7 +80,8 @@ def test_probe_platform_blocks_without_dedicated_browser_session(monkeypatch):
     result = verify.probe_platform("x")
 
     assert result.status == AccountStatus.NEEDS_LOGIN
-    assert "Dedicated InfoOS browser session is not configured" in (result.error or "")
+    assert "当前实例未找到有效的专用浏览器会话记录" in (result.error or "")
+    assert "browser_connect" in (result.error or "")
     assert calls == []
 
 

@@ -104,7 +104,7 @@ def test_prepare_opencli_browser_session_blocks_without_dedicated_launcher(monke
     assert result["status"] == "blocked"
     assert result["browser_opened"] is False
     assert result["browser_bridge_connected"] is False
-    assert any(issue.startswith("Dedicated InfoOS browser launcher is missing") for issue in result["issues"])
+    assert any(issue == "专用浏览器启动器不存在" for issue in result["issues"])
     assert ["open", "-a", "Google Chrome", "https://x.com/home"] not in calls
 
 
@@ -638,7 +638,7 @@ def test_prepare_opencli_browser_session_blocks_when_x_probe_fails(monkeypatch, 
 
     assert result["status"] == "blocked"
     assert result["x_login"]["status"] == "logged_out"
-    assert any("X readiness probe failed" in issue for issue in result["issues"])
+    assert any("X 登录状态检查未通过" in issue for issue in result["issues"])
 
 def test_restart_opencli_daemon_prefers_restart_command(monkeypatch, isolate_opencli_lock, tmp_path):
     calls = []

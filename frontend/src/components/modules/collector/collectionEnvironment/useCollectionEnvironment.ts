@@ -4,6 +4,7 @@ import { useResource } from "../../../ui/hooks/useResource";
 import { useToast } from "../../../ui/Toast";
 import {
   checkPlatformAccount,
+  checkOpencliBridge,
   fetchCollectionEnvironment,
   launchDedicatedChrome,
   launchPlatformLogin,
@@ -23,6 +24,7 @@ export function useCollectionEnvironment(onStartSetup: () => Promise<void>) {
     query: "",
     status: "all",
     openingChrome: false,
+    checkingBridge: false,
     checkingPlatform: null as string | null,
     loginPlatform: null as string | null,
     selectedPlatform: null as string | null,
@@ -76,6 +78,22 @@ export function useCollectionEnvironment(onStartSetup: () => Promise<void>) {
       });
     } finally {
       dispatch({ openingChrome: false });
+    }
+  }
+
+  async function checkBridge() {
+    dispatch({ checkingBridge: true });
+    try {
+      const result = await checkOpencliBridge();
+      await readPersistedSnapshot();
+      toast.pushToast({
+        kind: result.ok ? "success" : "error",
+        message: result.ok ? "OpenCLI Bridge 已连接" : "OpenCLI Bridge 检查未通过，请查看组件状态",
+      });
+    } catch (reason) {
+      toast.pushToast({ kind: "error", message: `Bridge 状态检查失败：${errorMessage(reason)}` });
+    } finally {
+      dispatch({ checkingBridge: false });
     }
   }
 
@@ -257,6 +275,7 @@ export function useCollectionEnvironment(onStartSetup: () => Promise<void>) {
     openPendingRecoveryConsole,
     verifyPendingRecovery,
     openChrome,
+    checkBridge,
     checkAccount,
     login,
   };

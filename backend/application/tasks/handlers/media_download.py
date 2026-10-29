@@ -265,7 +265,7 @@ def media_download_status(
     reason_set = set(gap_reasons)
     if reason_set & {"yt_dlp_missing", "gallery_dl_missing", "tool_missing", "xiaohongshu_media_download_opencli_missing"}:
         return "blocked_missing_tool"
-    if reason_set & {"auth_required", "x_media_download_auth_required", "xiaohongshu_media_download_failed"}:
+    if reason_set & {"auth_required", "x_media_download_auth_required"}:
         return "blocked_auth_required"
     if reason_set & {
         "x_media_download_no_media_found",

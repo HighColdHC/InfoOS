@@ -149,28 +149,29 @@ def _persisted_readiness(
     capability = resolve_source_capability(source)
     connector = database_source_to_connector_config(source)
     if not source["enabled"]:
-        return {"status": "disabled", "issues": ["source is disabled"], "diagnostic": None}
+        return {"status": "disabled", "issues": ["来源已停用"], "diagnostic": None}
     if capability.status == "implemented_uncalibrated":
-        return {"status": "blocked", "issues": ["source is awaiting current-version initial fetch"],
+        return {"status": "blocked", "issues": ["当前配置尚待完成首次采集"],
                 "diagnostic": {"category": "configuration"}}
     if capability.status in {"planned", "unsupported"}:
-        return {"status": "blocked", "issues": [f"source capability is {capability.status}"],
+        message = "该来源能力尚在规划中" if capability.status == "planned" else "该来源能力暂不支持"
+        return {"status": "blocked", "issues": [message],
                 "diagnostic": {"category": "configuration"}}
     if connector.get("type") == "rss":
-        issues: list[str] = [] if source["identifier"] else ["rss source requires feed URL"]
+        issues: list[str] = [] if source["identifier"] else ["RSS 来源需要订阅地址"]
         return {"status": "ready" if not issues else "blocked", "issues": issues,
                 "diagnostic": {"category": "configuration"} if issues else None}
     if platform in source_browser_platforms():
         requires_session = connector.get("type") == "opencli"
         issues = []
         if requires_session and not browser_configured:
-            issues.append("Dedicated browser session is not configured")
+            issues.append("当前实例未找到有效的专用浏览器会话记录")
         if browser_configured and capability.requires_login == REQUIRED_LOGIN and login_by_platform.get(platform) != "verified":
-            issues.append(f"auth_required: {platform} login is not verified in the dedicated profile")
-        category = "auth_required" if any(issue.startswith("auth_required:") for issue in issues) else "browser_session"
+            issues.append("尚未确认该平台在专用浏览器中的登录状态")
+        category = "auth_required" if browser_configured and capability.requires_login == REQUIRED_LOGIN and login_by_platform.get(platform) != "verified" else "browser_session"
         return {"status": "ready" if not issues else "blocked", "issues": issues,
                 "diagnostic": {"category": category} if issues else None}
     if platform in {"hackernews", "producthunt"}:
         return {"status": "ready", "issues": [], "diagnostic": None}
-    return {"status": "blocked", "issues": [f"unsupported platform: {platform}"],
+    return {"status": "blocked", "issues": ["暂不支持该平台"],
             "diagnostic": {"category": "configuration"}}

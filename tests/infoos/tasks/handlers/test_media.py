@@ -33,6 +33,19 @@ def _one_task(repo: TaskRepository, task_type: TaskType) -> Task:
     return tasks[0]
 
 
+def test_media_download_status_distinguishes_xhs_failure_from_authentication():
+    from backend.application.tasks.handlers.media_download import media_download_status
+
+    for reason, expected in (
+        ("xiaohongshu_media_download_failed", "failed_download_error"),
+        ("auth_required", "blocked_auth_required"),
+        ("x_media_download_auth_required", "blocked_auth_required"),
+    ):
+        assert media_download_status(
+            media_available=False, gap_reasons=[reason], expects_media=True, candidate_count=1,
+        ) == expected
+
+
 def test_reddit_text_post_skips_media_without_recording_a_gap(tmp_path: Path, monkeypatch):
     from backend.application.tasks.handlers.media_download import handle_media_download
 
@@ -177,21 +190,32 @@ def test_media_download_task_reports_download_gap_reason(tmp_path: Path, monkeyp
             task_type=TaskType.MEDIA_DOWNLOAD,
             target_kind="card",
             target_id="card_xhs_media_gap",
+            max_attempts=1,
         )
     )
 
     result = run_due_tasks(tmp_path, max_workers=1)
 
-    assert result["skipped"] == 1
+    assert result["failed"] == 1
     task = repo.get("media_download_card_xhs_media_gap")
-    assert task.status == TaskStatus.SKIPPED
-    assert task.artifacts_summary["download_status"] == "blocked_auth_required"
+    assert task is not None
+    assert task.status == TaskStatus.FAILED
+    assert task.artifacts_summary["download_status"] == "failed_download_error"
     assert task.artifacts_summary["gap_reasons"] == ["xiaohongshu_media_download_failed"]
     finalize = _one_task(repo, TaskType.CARD_FINALIZE)
     assert finalize.depends_on == ()
     assert finalize.artifacts_summary["upstream_media_tasks"] == [
-        {"task_id": "media_download_card_xhs_media_gap", "status": "skipped"}
+        {"task_id": "media_download_card_xhs_media_gap", "status": "failed"}
     ]
+    run_due_tasks(tmp_path, max_workers=1)
+    card = CardRepository(tmp_path).get_card("card_xhs_media_gap")
+    assert card is not None
+    assert card["completeness_status"] == "partial"
+    reasons = card["missing_reasons"]
+    assert isinstance(reasons, list)
+    assert "xiaohongshu_media_download_failed" in reasons
+    assert "failed_download_error" in reasons
+    assert "blocked_auth_required" not in reasons
 
 
 def test_media_download_blocks_when_youtube_expected_media_but_tool_missing(tmp_path: Path, monkeypatch):

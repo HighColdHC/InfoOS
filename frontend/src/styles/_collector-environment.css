@@ -60,8 +60,8 @@
   background: var(--tone, var(--color-border-strong));
   pointer-events: none;
 }
-.collector-shell .collector-environment-component:has(.is-installed, .is-configured, .is-ready) { --tone: var(--color-success); }
-.collector-shell .collector-environment-component:has(.is-missing, .is-failed) { --tone: var(--color-danger); }
+.collector-shell .collector-environment-component:has(.is-installed, .is-configured, .is-ready, .is-connected) { --tone: var(--color-success); }
+.collector-shell .collector-environment-component:has(.is-missing, .is-failed, .is-disconnected) { --tone: var(--color-danger); }
 .collector-shell .collector-environment-component:has(.is-unknown) { --tone: var(--color-warning); }
 .collector-shell .collector-environment-component-grid { gap: 10px; margin-top: 14px; }
 .collector-shell .collector-environment-component__head strong { font-size: var(--font-size-md); }

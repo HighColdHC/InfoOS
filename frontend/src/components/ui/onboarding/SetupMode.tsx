@@ -1,3 +1,4 @@
+import { browserStatusMessage } from "../../../lib/browserStatusMessage";
 import type { ReactElement } from "react";
 import type { PlatformCapability, SetupAccountState, SetupState } from "../../../lib/types";
 import { Modal } from "../Modal";
@@ -85,7 +86,7 @@ export function SetupMode({
           <Button variant="primary" onClick={launchChrome}>
             启动专用 Chrome
           </Button>
-          {chromeError && <p className="setup-card-error">{chromeError}</p>}
+          {chromeError && <p className="setup-card-error">{browserStatusMessage(chromeError)}</p>}
           {browserConsoleUrl ? (
             <div className="setup-browser-console">
               <div>
@@ -124,7 +125,7 @@ export function SetupMode({
                 。首次启动后点击检查连接；验证时可能安全重启专用 Chrome 以确认绑定，登录 Cookie 和专用 Profile 会保留。
               </p>
               {boundContextId && <p className="hint">已绑定 contextId: {boundContextId}</p>}
-              {extensionError && <p className="setup-card-error">{extensionError}</p>}
+              {extensionError && <p className="setup-card-error">{browserStatusMessage(extensionError)}</p>}
             </>
           }
         />
@@ -156,7 +157,7 @@ export function SetupMode({
                       验证阶段：
                       {persistenceStageLabel(account?.persistence_stage ?? null)}
                     </span>
-                    {error && <span className="platform-list__error">持久化错误：{error}</span>}
+                    {error && <span className="platform-list__error">持久化错误：{browserStatusMessage(error)}</span>}
                     <Button variant="ghost" size="sm" onClick={() => probePlatform(p)} disabled={isBusy}>
                       {isBusy ? "正在验证登录持久化..." : "验证登录持久化"}
                     </Button>

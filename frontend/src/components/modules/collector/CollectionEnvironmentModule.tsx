@@ -33,6 +33,7 @@ export function CollectionEnvironmentModule({ onStartSetup }: { onStartSetup: ()
     openPendingRecoveryConsole,
     verifyPendingRecovery,
     openChrome,
+    checkBridge,
     checkAccount,
     login,
   } = useCollectionEnvironment(onStartSetup);
@@ -40,6 +41,7 @@ export function CollectionEnvironmentModule({ onStartSetup }: { onStartSetup: ()
     query,
     status,
     openingChrome,
+    checkingBridge,
     checkingPlatform,
     loginPlatform,
     selectedPlatform,
@@ -120,7 +122,9 @@ export function CollectionEnvironmentModule({ onStartSetup }: { onStartSetup: ()
           <ComponentOverview
             components={snapshot.components}
             openingChrome={openingChrome}
+            checkingBridge={checkingBridge}
             onOpenChrome={() => void openChrome()}
+            onCheckBridge={() => void checkBridge()}
           />
           <section className="collector-environment-accounts" aria-label="平台账号区">
             <div className="collector-environment-section-title">

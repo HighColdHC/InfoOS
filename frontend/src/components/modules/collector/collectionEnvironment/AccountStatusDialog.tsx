@@ -1,3 +1,4 @@
+import { browserStatusMessage } from "../../../../lib/browserStatusMessage";
 import { Button } from "../../../ui/primitives/Button";
 import { Modal } from "../../../ui/Modal";
 import type { PlatformAccount } from "../../../../lib/types/collectionEnvironment";
@@ -41,7 +42,7 @@ export function AccountStatusDialog({ account, checking, loggingIn, error, onClo
           ) : null}
           {error ? (
             <div className="collector-environment-dialog-error" role="alert">
-              {error}
+              {browserStatusMessage(error)}
             </div>
           ) : null}
           <dl>
@@ -75,7 +76,7 @@ export function AccountStatusDialog({ account, checking, loggingIn, error, onClo
             </div>
             <div>
               <dt>错误说明</dt>
-              <dd>{account.error ?? account.action_hint ?? "无"}</dd>
+              <dd>{account.error ? browserStatusMessage(account.error) : account.action_hint ?? "无"}</dd>
             </div>
           </dl>
         </div>

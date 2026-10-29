@@ -38,7 +38,7 @@ SQLite + local assets
 | `backend/read_models/` | API/UI 只读投影，不触发业务副作用 |
 | `backend/workers/` | scheduler 与持久化任务消费者 |
 | `frontend/src/` | React 前端；只通过 `/api/*` 使用后端 |
-| `clients/save-to-infoos/` | Manifest V3 捕获扩展；只调用 `/api/capture/v1` |
+| `clients/save-to-infoos/` | Manifest V3 捕获扩展源码；尚未经真实浏览器端到端验证，不属于当前对外承诺的功能 |
 | `deploy/docker/` | Dockerfile、Compose、s6/rootfs、Chrome/OpenCLI 与容器运行面 |
 | `deploy/linux/` | 遗留 systemd Web 辅助面的维护资料，不是当前采集入口 |
 | `scripts/` | 环境、运维、迁移和验收脚本，不承载第二套业务实现 |
@@ -131,7 +131,7 @@ scheduler 每个 UTC 小时幂等规划 `PIPELINE_RECONCILE`；对账由 worker 
 - Docker Appliance 内 Chrome、OpenCLI 和 Bridge 由同一非 root UID 持有，保持正常 sandbox；
 - passive health/readiness 不启动 Chrome、不新建 tab、不调用采集；
 - 当前会话可用与登录态持久化是两个状态，持久化必须经过同 profile 重启前后功能探针；
-- Save to InfoOS 扩展只经认证产品入口提交捕获，不连接内部运行时；
+- Save to InfoOS 扩展的设计约束是只经认证产品入口提交捕获，不连接内部运行时；该扩展尚未经真实浏览器端到端验证；
 - raw CDP、VNC/noVNC、OpenCLI daemon 和 supervisor 端口不得发布。
 
 ## 8. 正式入口

@@ -12,13 +12,13 @@ import sqlite3
 import subprocess
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from backend.application.enrichment.asr.providers.sherpa import SherpaOnnxProvider
+from backend.infrastructure.browser import opencli_health
 from backend.infrastructure.browser.setup_discovery import (
     find_chrome_binary,
     get_chrome_version,
-    inspect_opencli_extension,
 )
 from backend.infrastructure.runtime.media_tools import media_tool_status
 from backend.infrastructure.runtime.setup_state import (
@@ -26,10 +26,17 @@ from backend.infrastructure.runtime.setup_state import (
     ComponentState,
     load_state,
     save_state,
+    setup_state_lock,
 )
 
 
 Probe = Callable[[], Mapping[str, Any]]
+
+
+class BridgeProbeResult(TypedDict):
+    status: str
+    version: str | None
+    detail_code: str | None
 
 
 def refresh_component_snapshot(
@@ -98,12 +105,31 @@ def _probe_chrome() -> dict[str, str | None]:
     return {"status": "installed", "version": get_chrome_version(binary)}
 
 
-def _probe_opencli_bridge() -> dict[str, str | None]:
-    result = inspect_opencli_extension()
-    if not result.get("loaded"):
-        return {"status": "missing", "version": None, "detail_code": "opencli_bridge_missing"}
-    version = result.get("version") or result.get("manifest_version")
-    return {"status": "installed", "version": str(version) if version is not None else None}
+def _probe_opencli_bridge() -> BridgeProbeResult:
+    # daemon status reads the existing connection; it does not start a daemon,
+    # launch Chrome, create a tab or run a browser command.
+    result = opencli_health.refresh(include_profiles=False)
+    if result.get("hint"):
+        return {"status": "failed", "version": None, "detail_code": "bridge_check_failed"}
+    if not result["daemon_running"]:
+        return {"status": "disconnected", "version": None, "detail_code": "daemon_unavailable"}
+    if not result["extension_connected"]:
+        return {"status": "disconnected", "version": None, "detail_code": "bridge_disconnected"}
+    return {"status": "connected", "version": result["extension_version"], "detail_code": None}
+
+
+def check_opencli_bridge(state_path: Path) -> dict[str, Any]:
+    """Explicitly check and persist only Bridge connectivity, without repair."""
+    result = _probe_opencli_bridge()
+    component = ComponentState(**result, last_checked=utc_now_micro_z())
+    with setup_state_lock(state_path):
+        state = load_state(state_path)
+        state.components["opencli_bridge"] = component
+        save_state(state_path, state)
+    return {"ok": component.status == "connected", "component": {
+        "status": component.status, "version": component.version,
+        "last_checked_at": component.last_checked, "detail_code": component.detail_code,
+    }}
 
 
 def _probe_media_tool(tool_id: str) -> dict[str, str | None]:

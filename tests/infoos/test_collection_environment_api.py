@@ -101,6 +101,8 @@ def test_get_collection_environment_returns_saved_seven_components_and_six_accou
         "version": "126.0",
         "is_chrome": True,
         "action": "launch",
+        "last_checked_at": None,
+        "detail_code": None,
     }
     assert len(payload["accounts"]) == 6
     assert [item["platform"] for item in payload["accounts"]] == [
@@ -236,8 +238,8 @@ def test_collection_environment_projects_only_safe_passive_circuit_fields(
     client = _client(tmp_path, monkeypatch)
     save_state(tmp_path / "setup-state.json", SetupState.from_dict({}))
     RuntimeCircuitRepository(tmp_path).record_failure(
-        "provider",
-        "provider-safe",
+        "platform",
+        "x",
         occurred_at="2026-07-23T00:00:00Z",
         policy=CircuitPolicy(failure_threshold=1, cooldown_seconds=60),
     )
@@ -246,8 +248,8 @@ def test_collection_environment_projects_only_safe_passive_circuit_fields(
 
     assert payload["runtime_circuits"] == [
         {
-            "scope_kind": "provider",
-            "scope_key": "provider-safe",
+            "scope_kind": "platform",
+            "scope_key": "x",
             "state": "open",
             "outage_epoch": 1,
             "consecutive_failures": 1,

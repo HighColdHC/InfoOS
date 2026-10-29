@@ -8,6 +8,8 @@ export type EnvironmentComponent = {
   version: string | null;
   is_chrome: boolean;
   action: string | null;
+  last_checked_at?: string | null;
+  detail_code?: string | null;
 };
 
 export type PlatformAccount = {

@@ -28,7 +28,7 @@ FastAPI、React、SQLite、Docker 和具体平台都是当前实现或交付形�
 
 ### 2.2 用户主动捕获
 
-用户通过 Save to InfoOS 浏览器扩展把当前页面提交到 `/api/capture/v1`；agent 也可以经 `/mcp` 代用户提交链接。系统为这类输入使用 system-managed capture source，但后续仍进入同一 SourceRun、RawItem 和 InformationCard 合同。扩展只连接受认证产品入口，不直接访问 SQLite、worker、OpenCLI 或专用 Chrome。
+agent 可以经 `/mcp` 代用户提交链接。系统为这类输入使用 system-managed capture source，但后续仍进入同一 SourceRun、RawItem 和 InformationCard 合同。捕获 API `/api/capture/v1` 独立提供；Save to InfoOS 扩展尚未经真实浏览器端到端验证，不属于当前对外承诺的功能。
 
 主动捕获是“手动刷”与 InfoOS 之间的连接点：用户在原生平台刷到内容，一键入库，之后由 agent 评估。手机端不另做 App 或快捷指令：用户把分享链接或分享文本交给 agent，agent 经 `/mcp` 提交；InfoOS 先查重（跨所有来源、识别短链），已采集直接返回现有卡片，未采集才进入捕获链。
 
@@ -121,7 +121,7 @@ agent 写回（MCP submit_evaluations）-> 写入评估与评估 block -> CARD_F
 
 - 10 个可配置平台的持续采集；
 - 注册表限定的按需调研；
-- Save to InfoOS 主动捕获；
+- MCP `capture_url/get_capture` 按需捕获；
 - SQLite 持久化任务、scheduler 与按队列 durable worker；
 - 正文补全、媒体下载、视频 ASR；
 - 保存 agent 写回的分诊与知识卡拆解、归并结果，并据此冻结日报。

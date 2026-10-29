@@ -17,7 +17,7 @@
 
 - [给 AI agent 的安装与使用说明](INSTALL-for-agents.md)
 - [浏览器捕获与按需媒体合同](product/browser-capture-contract.md)
-- [Save to InfoOS 浏览器扩展需求](product/save-to-infoos-extension.md)
+- [Save to InfoOS 浏览器扩展需求（未完成端到端验证）](product/save-to-infoos-extension.md)
 - [多平台调研功能合同](product/multi-platform-research-contract.md)
 - [外部 agent 运行手册](engineering/opportunity-agent-runbook.md)
 - [抖音变现初筛](engineering/douyin-monetization-prefilter.md)、[小红书变现初筛](engineering/xiaohongshu-monetization-prefilter.md)

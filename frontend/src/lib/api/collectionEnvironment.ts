@@ -9,6 +9,10 @@ export function launchDedicatedChrome(): Promise<BrowserConsoleActionResult> {
   return postAction<BrowserConsoleActionResult>("/api/browser/session", { action: "launch" });
 }
 
+export function checkOpencliBridge(): Promise<BrowserActionResult> {
+  return postAction("/api/browser/bridge-check", {}, { allowNegativeResult: true });
+}
+
 export function checkPlatformAccount(platform: string): Promise<BrowserActionResult> {
   return postAction("/api/browser/login-check", { platform }, { allowNegativeResult: true });
 }

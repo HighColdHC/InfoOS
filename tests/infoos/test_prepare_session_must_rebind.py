@@ -298,7 +298,7 @@ def test_supervised_binding_rejects_previous_container_pid(monkeypatch):
         result, "opencli"
     ) is False
     assert result["profile"]["binding_status"] == "stale"
-    assert "PID" in result["profile"]["binding_error"]
+    assert result["profile"]["binding_error"] == "已记录的 Chrome 进程与专用配置不匹配"
 
 
 # ---------------------------------------------------------------------------

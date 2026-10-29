@@ -15,7 +15,7 @@ from backend.domain.sources.registry import PLATFORM_REGISTRY, source_browser_pl
 from backend.domain.tasks import fetch_circuit_source_id
 from backend.infrastructure.browser import session_state
 from backend.infrastructure.runtime.container_health import ContainerHealth, read_container_health
-from backend.infrastructure.runtime.setup_state import AccountState, AccountStatus, COMPONENT_IDS, load_state
+from backend.infrastructure.runtime.setup_state import AccountState, AccountStatus, COMPONENT_IDS, ComponentState, load_state
 from backend.infrastructure.storage.repositories import SourceRepository
 from backend.infrastructure.storage.auth_recovery import AuthRecoveryRepository
 from backend.infrastructure.storage.runtime_circuits import RuntimeCircuitRepository
@@ -47,6 +47,8 @@ class ComponentItem(TypedDict):
     version: str | None
     is_chrome: bool
     action: str | None
+    last_checked_at: str | None
+    detail_code: str | None
 
 
 class AccountItem(TypedDict):
@@ -102,14 +104,7 @@ def read_collection_environment(
         "runtime_circuits": _runtime_circuits(base_dir),
         "pending_auth_recoveries": _pending_auth_recoveries(base_dir),
         "components": [
-            {
-                "id": component_id,
-                "name": COMPONENT_NAMES[component_id],
-                "status": setup.components[component_id].status,
-                "version": setup.components[component_id].version,
-                "is_chrome": component_id == "dedicated_chrome",
-                "action": "launch" if component_id == "dedicated_chrome" else None,
-            }
+            _component_item(component_id, setup.components[component_id])
             for component_id in COMPONENT_IDS
         ],
         "accounts": [
@@ -122,6 +117,21 @@ def read_collection_environment(
             for platform in _account_platforms()
         ],
         "snapshot_at": setup.component_snapshot_at,
+    }
+
+
+def _component_item(component_id: str, component: ComponentState) -> ComponentItem:
+    # Old snapshots proved installation only, not a live Bridge connection.
+    installation_only = component_id == "opencli_bridge" and component.status in {"installed", "missing"}
+    return {
+        "id": component_id,
+        "name": COMPONENT_NAMES[component_id],
+        "status": "unknown" if installation_only else component.status,
+        "version": None if installation_only else component.version,
+        "is_chrome": component_id == "dedicated_chrome",
+        "action": "launch" if component_id == "dedicated_chrome" else "check" if component_id == "opencli_bridge" else None,
+        "last_checked_at": None if installation_only else component.last_checked,
+        "detail_code": None if installation_only else component.detail_code,
     }
 
 

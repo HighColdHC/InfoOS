@@ -6,6 +6,7 @@ export type MetricItem = {
   label: string;
   value: string | number;
   icon: LucideIcon;
+  description?: string;
   trend?: string;
   trendDirection?: "up" | "down" | "flat";
 };
@@ -40,7 +41,10 @@ export function MetricGrid({ metrics }: { metrics: MetricItem[] }) {
               ) : null}
             </div>
             <strong className="metric-card__value">{item.value}</strong>
-            <span className="metric-card__label">{item.label}</span>
+            <span className="metric-card__label">
+              {item.label}
+              {item.description ? <small className="metric-card__description">{item.description}</small> : null}
+            </span>
           </div>
         );
       })}

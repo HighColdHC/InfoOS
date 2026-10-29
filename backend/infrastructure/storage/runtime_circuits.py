@@ -10,6 +10,7 @@ import sqlite3
 from typing import Any, cast
 
 from backend.domain.failures.facts import safe_identifier
+from backend.domain.sources.registry import PLATFORM_REGISTRY
 from backend.infrastructure.storage.paths import resolve_sqlite_path
 from backend.infrastructure.storage.runtime_circuits_types import CircuitRow, SafeCircuitRow
 from backend.infrastructure.storage.task_events import TaskEventRepository
@@ -486,24 +487,27 @@ class RuntimeCircuitRepository:
         return cast(CircuitRow, dict(row)) if row else None
 
     def list_safe(self) -> list[SafeCircuitRow]:
+        platforms = tuple(PLATFORM_REGISTRY)
+        placeholders = ",".join("?" for _ in platforms)
         with self._connection() as conn:
             rows = conn.execute(
-                """
+                f"""
                 select scope_kind, scope_key, state, consecutive_failures,
                        outage_epoch,
                        opened_at, cooldown_until as next_probe_at,
                        reason_code, last_failure_at, last_success_at,
                        case
                          when recovery_mode != 'manual' then 'none'
-                         when reason_code = 'quota_exceeded' then 'restore_provider_quota'
                          when reason_code = 'platform_not_logged_in' then 'login_required'
                          else 'config_required'
                        end as user_action,
                        updated_at
                 from runtime_circuits
-                where state != 'closed'
+                where state != 'closed' and scope_kind = 'platform'
+                  and (scope_key in ({placeholders}) or scope_key like 'rss:%')
                 order by scope_kind, scope_key
-                """
+                """,
+                platforms,
             ).fetchall()
         return [cast(SafeCircuitRow, dict(row)) for row in rows]
 

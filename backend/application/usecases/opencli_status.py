@@ -48,14 +48,14 @@ def _opencli_status(executable: str, *, allow_repair: bool = False) -> dict:
             timeout=10,
             check=False,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
-        status["doctor_hint"] = str(exc)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        status["doctor_hint"] = "无法读取 OpenCLI 运行状态"
         return status
 
     status["available"] = version.returncode == 0
     status["version"] = version.stdout.strip() or None
     if not status["available"]:
-        status["doctor_hint"] = version.stderr.strip() or "OpenCLI version check failed"
+        status["doctor_hint"] = "无法读取 OpenCLI 版本信息"
         return status
 
     try:
@@ -67,9 +67,9 @@ def _opencli_status(executable: str, *, allow_repair: bool = False) -> dict:
             timeout=30,
             check=False,
         )
-    except subprocess.TimeoutExpired as exc:
+    except subprocess.TimeoutExpired:
         status["doctor_status"] = "timeout"
-        status["doctor_hint"] = str(exc)
+        status["doctor_hint"] = "无法读取 OpenCLI 运行状态"
         return status
 
     doctor_output = "\n".join(part for part in [doctor.stdout.strip(), doctor.stderr.strip()] if part)
@@ -83,7 +83,7 @@ def _opencli_status(executable: str, *, allow_repair: bool = False) -> dict:
         or "extension: connected" in output_lower
     )
     if not status["browser_bridge_connected"]:
-        status["doctor_hint"] = "Browser Bridge extension is not connected"
+        status["doctor_hint"] = "Browser Bridge 扩展未连接"
     return status
 
 

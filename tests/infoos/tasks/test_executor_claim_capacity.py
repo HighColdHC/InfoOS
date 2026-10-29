@@ -249,7 +249,7 @@ def test_browser_startup_readiness_is_deferred_before_blocking(tmp_path: Path, m
         "prepare_opencli_browser_session",
         lambda **_kwargs: {
             "status": "blocked",
-            "issues": ["Supervised Chrome or its OpenCLI extension is not ready"],
+            "issues": ["专用 Chrome 或 OpenCLI 扩展尚未就绪"],
         },
     )
 

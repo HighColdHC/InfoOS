@@ -51,9 +51,14 @@ def test_v17_upgrade_retires_scys_and_preserves_other_platforms(tmp_path):
         assert _rows(conn, 'auth_recovery_incidents') == before_incidents
         assert _rows(conn, 'runtime_circuits') == before_circuits
 
-    report = runner.migrate_database(path)
-    assert (report.before_version, report.after_version) == (17, runner.LATEST_VERSION)
+    def stop_after_v18(event):
+        if event['migration'] == 19:
+            raise RuntimeError('stop after v18')
+
+    with pytest.raises(RuntimeError, match='stop after v18'):
+        runner.migrate_database(path, progress_callback=stop_after_v18)
     with sqlite3.connect(path) as conn:
+        assert conn.execute('pragma user_version').fetchone()[0] == 18
         conn.row_factory = sqlite3.Row
         incidents = conn.execute('select * from auth_recovery_incidents order by rowid').fetchall()
         for row in incidents[:2]:
@@ -79,8 +84,10 @@ def test_v17_upgrade_retires_scys_and_preserves_other_platforms(tmp_path):
         after_circuits = _rows(conn, 'runtime_circuits')
         assert conn.execute('pragma integrity_check').fetchone()[0] == 'ok'
         assert conn.execute('pragma foreign_key_check').fetchall() == []
-    assert runner.migrate_database(path).batches == ()
+    with pytest.raises(RuntimeError, match='stop after v18'):
+        runner.migrate_database(path, progress_callback=stop_after_v18)
     with sqlite3.connect(path) as conn:
+        assert conn.execute('pragma user_version').fetchone()[0] == 18
         assert _rows(conn, 'auth_recovery_incidents') == after_incidents
         assert _rows(conn, 'runtime_circuits') == after_circuits
 

@@ -3,6 +3,7 @@
 Endpoints:
 - GET  /api/browser/session       — current dedicated browser session state
 - POST /api/browser/session       — launch the dedicated browser session
+- POST /api/browser/bridge-check  — check the existing Bridge connection
 - POST /api/browser/login-check   — passive platform login summary
 - POST /api/browser/login-launch  — open a platform login URL
 - GET  /api/browser/console-authorize — internal console authorization
@@ -15,6 +16,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from backend.application.setup import browser_session
+from backend.application.setup.environment_snapshot import check_opencli_bridge
 from backend.api.browser_console import proxy_browser_console
 
 from backend.infrastructure.runtime.environment import setup_state_path
@@ -44,6 +46,12 @@ class BrowserPlatformAction(BaseModel):
 def get_browser_session() -> dict:
     """Return the current dedicated browser session state, if any."""
     return browser_session.read_browser_session()
+
+
+@router.post("/bridge-check")
+def post_bridge_check() -> dict:
+    """Check the existing OpenCLI/Chrome connection; never start or repair it."""
+    return check_opencli_bridge(SETUP_STATE_PATH)
 
 
 @router.post("/session", status_code=status.HTTP_202_ACCEPTED)

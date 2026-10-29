@@ -101,7 +101,7 @@ def _refresh_existing_profile_binding(result: dict, executable: str) -> bool:
             running=True,
             state=state,
             binding_status="stale",
-            binding_error="Persisted Chrome PID does not own the supervised profile",
+            binding_error="已记录的 Chrome 进程与专用配置不匹配",
         )
         return False
     if _session_binding_connected(executable, state):
@@ -114,7 +114,7 @@ def _refresh_existing_profile_binding(result: dict, executable: str) -> bool:
         running=True,
         state=state,
         binding_status="stale",
-        binding_error="Dedicated InfoOS OpenCLI profile is not connected",
+        binding_error="专用 OpenCLI 配置未连接",
     )
     return False
 
@@ -134,13 +134,13 @@ def _connected_opencli_profile_names(executable: str) -> tuple[list[str], str | 
             timeout=_PROFILE_LIST_TIMEOUT_SECONDS,
             check=False,
         )
-    except FileNotFoundError as exc:
-        return [], str(exc)
-    except subprocess.TimeoutExpired as exc:
-        return [], str(exc)
+    except FileNotFoundError:
+        return [], "无法读取专用 OpenCLI 配置状态"
+    except subprocess.TimeoutExpired:
+        return [], "无法读取专用 OpenCLI 配置状态"
     output = "\n".join(part for part in [profile_list.stdout, profile_list.stderr] if part)
     if profile_list.returncode != 0:
-        return [], output.strip() or "opencli profile list failed"
+        return [], "无法读取专用 OpenCLI 配置列表"
     names: list[str] = []
     for profile in _parse_profile_list(output):
         if profile["status"] == "connected" and profile["name"] not in names:
@@ -210,9 +210,9 @@ def _ensure_profile_binding(result: dict, executable: str, *, previous_connected
     if len(candidates) != 1:
         result["profile"]["binding_status"] = "ambiguous" if candidates else "missing"
         result["profile"]["binding_error"] = (
-            "Could not identify the InfoOS OpenCLI context; close non-InfoOS Browser Bridge profiles and retry"
+            "无法确定专用 OpenCLI 会话；请关闭其它 Browser Bridge 会话后再试"
             if candidates
-            else "No new InfoOS OpenCLI context appeared after launching the dedicated Chrome profile"
+            else "启动专用 Chrome 后未找到新的 OpenCLI 会话"
         )
         return False
     context_id = candidates[0]
@@ -250,17 +250,15 @@ def _run_profile_command(command: list[str], result: dict) -> bool:
             timeout=_PROFILE_LIST_TIMEOUT_SECONDS,
             check=False,
         )
-    except FileNotFoundError as exc:
-        result["profile"]["binding_error"] = str(exc)
+    except FileNotFoundError:
+        result["profile"]["binding_error"] = "无法操作专用 OpenCLI 配置"
         return False
-    except subprocess.TimeoutExpired as exc:
-        result["profile"]["binding_error"] = str(exc)
+    except subprocess.TimeoutExpired:
+        result["profile"]["binding_error"] = "无法操作专用 OpenCLI 配置"
         return False
     if completed.returncode != 0:
         result["profile"]["binding_error"] = (
-            completed.stderr.strip()
-            or completed.stdout.strip()
-            or f"OpenCLI profile command failed: {' '.join(command)}"
+            "专用 OpenCLI 配置操作失败"
         )
         return False
     return True

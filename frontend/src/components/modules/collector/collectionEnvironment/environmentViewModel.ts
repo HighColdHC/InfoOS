@@ -1,7 +1,7 @@
 import type { EnvironmentComponentStatus, PlatformAccountStatus } from "../../../../lib/types/collectionEnvironment";
 
 export function componentStatusLabel(status: EnvironmentComponentStatus): string {
-  return ({ installed: "已安装", configured: "已配置", missing: "未安装", unknown: "尚未检查", failed: "检查失败" } as Record<string, string>)[status] ?? status;
+  return ({ installed: "已安装", configured: "已配置", connected: "已连接", disconnected: "未连接", missing: "未安装", unknown: "尚未检查", failed: "检查失败" } as Record<string, string>)[status] ?? status;
 }
 
 export function accountStatusLabel(status: PlatformAccountStatus): string {

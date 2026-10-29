@@ -117,7 +117,7 @@ def _prepare_opencli_browser_session_locked(
             "opencli": _opencli_status(executable),
             "profile": _profile_payload(running=False, binding_status="missing_launcher"),
             "x_login": _x_login_unknown(),
-            "issues": [f"Dedicated InfoOS browser launcher is missing: {launcher}"],
+            "issues": ["专用浏览器启动器不存在"],
             "status": "blocked",
         }
     profile_running = _infoos_chrome_profile_running()
@@ -141,13 +141,13 @@ def _prepare_opencli_browser_session_locked(
     }
 
     if not ext_dir.is_dir():
-        result["issues"].append(f"Extension directory not found: {ext_dir}")
+        result["issues"].append("未找到浏览器扩展目录")
 
     opencli = _opencli_status(executable, allow_repair=False)
     result["opencli"] = opencli
     result["browser_bridge_connected"] = opencli["browser_bridge_connected"]
     if not opencli["available"]:
-        result["issues"].append(f"OpenCLI executable not available: {executable}")
+        result["issues"].append("OpenCLI 程序不可用")
         return result
     binding_ready = _refresh_existing_profile_binding(result, executable)
     if binding_ready:
@@ -170,8 +170,7 @@ def _prepare_opencli_browser_session_locked(
         # Binding lost or Chrome not running. Report blocked with a hint;
         # do not invoke the launcher.
         result.setdefault("issues", []).append(
-            "OpenCLI profile is not bound. Open InfoOS Chrome and let the "
-            "OpenCLI extension reconnect to the daemon before retrying."
+            "OpenCLI 配置尚未绑定；请打开专用 Chrome，待扩展重新连接后再试"
         )
         result["status"] = "blocked"
         return result
@@ -197,12 +196,12 @@ def _prepare_opencli_browser_session_locked(
                 return result
             _append_issue(
                 result,
-                str(rebound.get("error") or "Supervised-container binding refresh failed"),
+                "无法刷新专用浏览器的绑定状态",
             )
         else:
             _append_issue(
                 result,
-                "Supervised Chrome or its OpenCLI extension is not ready",
+                "专用 Chrome 或 OpenCLI 扩展尚未就绪",
             )
         result["status"] = "blocked"
         return result
@@ -287,17 +286,17 @@ def _prepare_opencli_browser_session_locked(
             )
 
     if not result["profile"]["running"]:
-        result["issues"].append("Dedicated InfoOS Chrome profile is not running")
+        result["issues"].append("专用 Chrome 未运行")
     if not result["profile"]["bound"]:
         _append_issue(
             result,
             result["profile"].get("binding_error")
-            or "Dedicated InfoOS OpenCLI profile is not bound",
+            or "专用 OpenCLI 配置未绑定",
         )
     if not result["opencli"]["browser_bridge_connected"]:
         result["issues"].append(
             result["opencli"]["doctor_hint"]
-            or "Browser Bridge extension is not connected"
+            or "Browser Bridge 扩展未连接"
         )
     return result
 
@@ -455,7 +454,7 @@ def _opencli_not_configured_status(executable: str) -> dict:
         "daemon_running": False,
         "doctor_status": "not_configured",
         "doctor_output": None,
-        "doctor_hint": "Dedicated browser session is not configured",
+        "doctor_hint": "当前实例未找到有效的专用浏览器会话记录",
     }
 
 
@@ -471,8 +470,7 @@ def _opencli_not_checked_status(executable: str) -> dict:
         "doctor_status": "not_checked",
         "doctor_output": None,
         "doctor_hint": (
-            "Passive browser status does not start OpenCLI; browser automation "
-            "runs only during explicit setup or browser-backed fetch tasks"
+            "被动状态读取不会启动 OpenCLI；浏览器自动化仅在显式设置或浏览器采集任务中运行"
         ),
     }
 

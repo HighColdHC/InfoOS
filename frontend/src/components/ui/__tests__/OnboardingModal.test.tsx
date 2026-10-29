@@ -267,7 +267,7 @@ describe("OnboardingModal setup mode", () => {
 
     expect(await screen.findByText("登录状态：验证失败")).toBeInTheDocument();
     expect(screen.getByText("验证阶段：安全重启专用 Chrome")).toBeInTheDocument();
-    expect(screen.getByText("持久化错误：Dedicated Chrome did not restart gracefully")).toBeInTheDocument();
+    expect(screen.getByText("持久化错误：专用 Chrome 未能正常重启")).toBeInTheDocument();
     expect(screen.getByText(/此主动操作会安全重启一次 InfoOS 专用 Chrome/)).toBeInTheDocument();
   });
 
@@ -300,6 +300,6 @@ describe("OnboardingModal setup mode", () => {
     render(<OnboardingModal onClose={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: /检查连接/ }));
 
-    expect(await screen.findByText(/No Browser Bridge context is connected\./)).toBeInTheDocument();
+    expect(await screen.findByText("Browser Bridge 扩展未连接")).toBeInTheDocument();
   });
 });

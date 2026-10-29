@@ -116,23 +116,20 @@ def _dedicated_session_error() -> str | None:
     state = session_state.read()
     if not session_state.is_alive(state) or not isinstance(state, session_state.BrowserSessionState):
         return (
-            "Dedicated InfoOS browser session is not configured; "
-            "Browser profile infoos-fetch is not connected. "
-            "Open InfoOS Chrome and verify the OpenCLI extension first."
+            "browser_connect: 当前实例未找到有效的专用浏览器会话记录；"
+            "请打开专用 Chrome 并先检查 OpenCLI 扩展连接"
         )
     try:
         actual_profile = Path(state.profile_dir).expanduser()
     except TypeError:
         return (
-            "Dedicated InfoOS browser session is not configured; "
-            "Browser profile infoos-fetch is not connected. "
-            "Open InfoOS Chrome and verify the OpenCLI extension first."
+            "browser_connect: 当前实例未找到有效的专用浏览器会话记录；"
+            "请打开专用 Chrome 并先检查 OpenCLI 扩展连接"
         )
     if actual_profile != chrome_profile_dir().expanduser():
         return (
-            "Dedicated InfoOS browser session points at an unexpected profile; "
-            "Browser profile infoos-fetch is not connected. "
-            "Open InfoOS Chrome and verify the OpenCLI extension first."
+            "browser_connect: 专用浏览器会话与当前配置不匹配；"
+            "请打开专用 Chrome 并先检查 OpenCLI 扩展连接"
         )
     return None
 

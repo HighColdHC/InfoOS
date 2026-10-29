@@ -1,6 +1,6 @@
 # 给 AI agent 的 InfoOS 安装与使用说明
 
-本文供 Claude Code、Codex 等 agent 协助用户在**自己的 Linux amd64 机器**安装 InfoOS。InfoOS 作者为徐行AI，许可证为 [AGPL-3.0-only](../LICENSE)。源码安装入口为本仓库，不使用维护者实例、种子数据库或私人服务。完整构建和从零安装仍须在目标 Linux 上验收，本文不能代替运行证据。
+本文供 Claude Code、Codex 等 agent 协助用户在自己的设备上以 Docker 单容器 Appliance 形式安装 InfoOS。InfoOS 作者为徐行AI，许可证为 [AGPL-3.0-only](../LICENSE)。源码安装入口为本仓库，不使用维护者实例、种子数据库或私人服务。我们在 Linux amd64 上构建与验证，其他平台请使用者自行兼容。完整构建和从零安装仍须在目标环境验收，本文不能代替运行证据。
 
 ## 1. 开始前：环境、容量与授权
 
@@ -8,7 +8,7 @@
 
 | 条件 | 要求与边界 |
 |---|---|
-| Appliance 主机 | Linux x86_64 / amd64；容器内运行 Chrome、Web、scheduler、worker、SQLite。macOS 和 ARM 不属于当前 Appliance 交付目标 |
+| Appliance 主机 | Docker 单容器 Appliance；容器内运行 Chrome、Web、scheduler、worker、SQLite。我们在 Linux amd64 上构建与验证，其他平台请使用者自行兼容 |
 | Docker | 使用 [Docker 官方 stable 渠道](https://docs.docker.com/engine/install/)的 Engine，支持 BuildKit，当前操作用户能访问 daemon。仓库未声明或实测最低 Engine 版本，记录实际客户端和服务端版本，不编造兼容下限 |
 | Compose | 使用 `docker compose` v2，建议统一采用 2.30.0+；GPU overlay 的 `gpus: all` [明确要求 2.30.0+](https://docs.docker.com/reference/compose-file/services/#gpus)。旧 `docker-compose` v1 不作安装入口 |
 | 其他工具和网络 | Git、Bash、标准 Unix 工具；可以下载 Docker 基础镜像、Chrome、npm/Python 包。备份另需 Python 3、zstd，按部署手册准备 |
@@ -177,7 +177,7 @@ ssh -N -L 8443:127.0.0.1:8443 linux-host
 
 建议分配：只读问答仅 `intelligence:read`；定时知识整理仅 `intelligence:read` + `evaluation:write`；初始化画像使用另一个含 `profile:write` 的交互 Token；按用户需要另授采集或交互写权限。scope 隔离限制能力，不能代替用户对某项来源或画像变更的确认。
 
-扩展接口独立：`GET /api/capture/v1/capabilities`、`POST /api/capture/v1/items`、`GET /api/capture/v1/items/{capture_id}` 均需 `captures:write`，可接收 `url_only` 和 `readable_content`，提交头 `Idempotency-Key` 须等于 `client_capture_id`。MCP `capture_url` 只提交 URL，使用 `collect:write`，`get_capture` 只读同 Token 回执。插件读卡/附件分别用 `cards:read` / `assets:read`。不能把扩展 Token 当作知识整理 Token，也不让安装 agent 绕过 MCP 直接写 SQLite。详见[捕获合同](product/browser-capture-contract.md)。
+捕获 API 权限独立：`GET /api/capture/v1/capabilities`、`POST /api/capture/v1/items`、`GET /api/capture/v1/items/{capture_id}` 均需 `captures:write`，可接收 `url_only` 和 `readable_content`，提交头 `Idempotency-Key` 须等于 `client_capture_id`。MCP `capture_url` 只提交 URL，使用 `collect:write`，`get_capture` 只读同 Token 回执。插件读卡/附件分别用 `cards:read` / `assets:read`。不能把仅有捕获权限的 Token 当作知识整理 Token，也不让安装 agent 绕过 MCP 直接写 SQLite。详见[捕获合同](product/browser-capture-contract.md)。
 
 ## 6. 首次来源、平台登录与关注画像
 

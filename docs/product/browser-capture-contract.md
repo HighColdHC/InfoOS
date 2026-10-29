@@ -123,7 +123,7 @@ captures:write
 规则：
 
 - Token 管理页面支持创建、编辑、撤销和轮换该 scope；
-- Save to InfoOS Token 默认只含 `captures:write`；
+- 捕获客户端应使用只含 `captures:write` 的最小权限 Token；
 - `captures:write` 不能读取卡片或资产；
 - `cards:read`/`assets:read` 不能提交捕获；
 - 明文 Token 只展示一次；
@@ -487,9 +487,9 @@ MVP 不新增长期签名 URL。Obsidian 私有图片由插件携带 Bearer 请�
 - 认证媒体播放；
 - 安全错误状态。
 
-### 17.3 Save to InfoOS
+### 17.3 Save to InfoOS（未完成真实浏览器端到端验证）
 
-只依赖本文件第 6 节 Capture Interface，不依赖 SQLite 或内部任务类型。
+设计上只依赖本文件第 6 节 Capture Interface，不依赖 SQLite 或内部任务类型。
 
 ### 17.4 Obsidian
 

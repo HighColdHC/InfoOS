@@ -1,5 +1,7 @@
 # Save to InfoOS
 
+本扩展尚未经真实浏览器端到端验证，不属于当前对外承诺的功能。
+
 Chrome/Chromium Manifest V3 浏览器扩展。它把用户明确选择的当前链接、选区或可读正文提交到 InfoOS `/api/capture/v1`，不写入 Obsidian，也不访问 InfoOS 内部端口。
 
 ## 开发

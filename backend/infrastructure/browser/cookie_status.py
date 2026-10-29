@@ -86,7 +86,8 @@ def check_cookie_login(platform: str, profile_dir: str | Path | None) -> dict[st
             "platform": platform,
             "checked": False,
             "status": "unsupported",
-            "error": f"platform {platform!r} has no cookie login rule",
+            "error": "暂不支持检查该平台的登录状态",
+            "error_code": "unsupported_platform",
         }
     if profile_dir is None:
         return _not_configured(platform, rule)
@@ -95,7 +96,7 @@ def check_cookie_login(platform: str, profile_dir: str | Path | None) -> dict[st
     cookie_dbs = _cookie_db_paths(profile)
     existing = [path for path in cookie_dbs if path.exists()]
     if not existing:
-        return _logged_out(platform, rule, "Chrome cookie database was not found in the dedicated profile")
+        return _logged_out(platform, rule, "专用浏览器中未找到登录状态数据库", "cookie_database_missing")
 
     for path in existing:
         try:
@@ -108,16 +109,17 @@ def check_cookie_login(platform: str, profile_dir: str | Path | None) -> dict[st
                     "login_url": rule.login_url,
                     "method": "cookie",
                 }
-        except sqlite3.Error as exc:
+        except sqlite3.Error:
             return {
                 "platform": platform,
                 "checked": True,
                 "status": "failed",
-                "error": f"Could not read Chrome cookie database: {exc}",
+                "error": "无法读取专用浏览器的登录状态",
+                "error_code": "cookie_database_unreadable",
                 "login_url": rule.login_url,
                 "method": "cookie",
             }
-    return _logged_out(platform, rule, "No login cookie was found in the dedicated profile")
+    return _logged_out(platform, rule, "未在专用浏览器中找到该平台的登录凭据", "auth_required")
 
 
 def _cookie_db_paths(profile_dir: Path) -> list[Path]:
@@ -181,18 +183,20 @@ def _not_configured(platform: str, rule: CookieRule) -> dict[str, Any]:
         "platform": platform,
         "checked": False,
         "status": "not_configured",
-        "error": "Dedicated browser session is not configured",
+        "error": "当前实例未找到有效的专用浏览器会话记录",
+        "error_code": "browser_session_not_configured",
         "login_url": rule.login_url,
         "method": "cookie",
     }
 
 
-def _logged_out(platform: str, rule: CookieRule, error: str) -> dict[str, Any]:
+def _logged_out(platform: str, rule: CookieRule, error: str, error_code: str) -> dict[str, Any]:
     return {
         "platform": platform,
         "checked": True,
         "status": "logged_out",
         "error": error,
+        "error_code": error_code,
         "login_url": rule.login_url,
         "method": "cookie",
     }

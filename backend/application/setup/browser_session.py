@@ -40,7 +40,7 @@ def read_browser_session() -> dict:
 def launch_browser_session() -> dict[str, str | bool]:
     result = launch_infoos_chrome()
     if not result.get("ok"):
-        return {"ok": False, "error": str(result.get("error") or "browser launch failed")}
+        return {"ok": False, "error": str(result.get("error") or "专用浏览器启动失败")}
     return {
         "ok": True,
         "task_id": str(uuid.uuid4()),
@@ -82,7 +82,7 @@ def launch_platform_login(platform: str) -> dict:
         raise ValueError(f"unsupported login platform: {platform}")
     result = launch_infoos_chrome(start_url=authorization_url)
     if not result.get("ok"):
-        return {"ok": False, "platform": platform, "error": result.get("error", "Unknown error")}
+        return {"ok": False, "platform": platform, "error": result.get("error", "专用浏览器启动失败")}
     return {
         "ok": True,
         "platform": platform,
@@ -158,7 +158,7 @@ def _passive_account_update(
         persisted = False
         persistence_checked_at = checked_at
         persistence_stage = "passive_logged_out"
-        persistence_error = "Passive login state is logged out"
+        persistence_error = "未在专用浏览器中找到该平台的登录凭据"
     return AccountState(
         status=status,
         last_checked=checked_at,

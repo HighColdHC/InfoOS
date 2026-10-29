@@ -4,12 +4,12 @@ import type { AuthRecoverySummary, RuntimeCircuit } from "../../../../lib/types/
 import { Button } from "../../../ui/primitives/Button";
 
 const safeReasons: Record<string, string> = {
-  quota_exceeded: "AI 供应商额度不足",
-  rate_limited: "AI 供应商暂时限流",
-  server_error: "AI 供应商服务异常",
-  network_error: "无法连接 AI 供应商",
+  quota_exceeded: "上游服务额度不足",
+  rate_limited: "上游服务暂时限流",
+  server_error: "上游服务异常",
+  network_error: "无法连接上游服务",
   network_timeout: "采集请求超时",
-  timeout: "AI 请求超时",
+  timeout: "请求超时",
   login_required: "登录状态需要恢复",
   provider_unavailable: "服务暂时不可用",
   upstream_unavailable: "服务暂时不可用",
@@ -27,7 +27,7 @@ const actionLabels: Record<RuntimeCircuit["user_action"], string> = {
   none: "无需人工操作",
   login_required: "需要登录",
   config_required: "检查配置",
-  restore_provider_quota: "补充额度后，在模型设置中测试连接以恢复任务",
+  restore_provider_quota: "该保护属于已退役功能，无需补充模型额度",
 };
 
 function formatTimestamp(value: string) {

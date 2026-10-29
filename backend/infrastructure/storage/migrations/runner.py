@@ -14,7 +14,7 @@ from .v0001_baseline import SchemaDriftError as SchemaDriftError
 from .v0002_legacy_backfills import LegacyMigrationMarkerError as LegacyMigrationMarkerError
 
 
-LATEST_VERSION = 21
+LATEST_VERSION = 22
 DEFAULT_BATCH_SIZE = v0002_legacy_backfills.DEFAULT_BATCH_SIZE
 ProgressCallback = Callable[[dict[str, Any]], None]
 
@@ -375,6 +375,12 @@ def migrate_database(
                     _validate_latest_schema(conn, include_v19=True, include_v21=True)
                     conn.execute("pragma user_version = 21")
                     event = {"migration": 21, "phase": "knowledge_cards", "rows": 0, "complete": True}
+                elif current == 21:
+                    _validate_latest_schema(conn, include_v19=True, include_v21=True)
+                    for statement in _sql_statements("v0022_retire_llm_circuits.sql"):
+                        conn.execute(statement)
+                    conn.execute("pragma user_version = 22")
+                    event = {"migration": 22, "phase": "retire_llm_circuits", "rows": 0, "complete": True}
                 else:
                     raise DatabaseMigrationError(f"unsupported database version {current} at {path}")
                 if progress_callback is not None:

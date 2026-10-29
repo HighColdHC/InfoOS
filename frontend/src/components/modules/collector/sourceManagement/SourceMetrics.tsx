@@ -8,7 +8,8 @@ export function SourceMetrics({ summary }: { summary: SourceManagementSummary })
       { label: "全部来源", value: summary.total_sources, icon: Rss },
       { label: "启用中", value: summary.enabled_sources, icon: CheckCircle2 },
       { label: "需要关注", value: summary.needs_attention, icon: AlertTriangle },
-      { label: "近 7 天可靠性", value: `${(summary.reliability_7d * 100).toFixed(1)}%`, icon: Activity },
+      { label: "近 7 天可靠性", value: `${(summary.reliability_7d * 100).toFixed(1)}%`, icon: Activity,
+        description: "近 7 天全部来源的运行成功率" },
     ]} />
   );
 }

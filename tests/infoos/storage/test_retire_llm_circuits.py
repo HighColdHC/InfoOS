@@ -10,6 +10,7 @@ from backend.infrastructure.storage.repositories import SourceRepository
 from backend.infrastructure.storage.runtime_circuits import CircuitPolicy, RuntimeCircuitRepository
 from backend.read_models.collector_status import read_collector_status
 from tests.infoos._factories import make_source_payload
+from tests.infoos.storage.migration_test_helpers import drop_v23_indexes
 
 NOW = "2026-10-28T00:00:00Z"
 
@@ -28,6 +29,7 @@ def test_retired_circuits_are_audited_and_removed_atomically(tmp_path, monkeypat
             owner_token,task_id,acquired_at,lease_expires_at,updated_at)
             values('browser','chrome','owner','fetch',?,'2026-10-29T00:00:00Z',?)""", (NOW, NOW))
         resource_before = tuple(conn.execute("select * from runtime_resource_leases").fetchone())
+        drop_v23_indexes(conn)
         conn.execute("pragma user_version=21")
         conn.commit()
     if interrupt:

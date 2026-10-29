@@ -12,40 +12,60 @@ from backend.infrastructure.storage.base import InfoOSRepository
 from backend.infrastructure.storage.opportunity_follow_ups import OpportunityFollowUpRepository
 from backend.read_models._connections import shared_read_connection
 from backend.read_models.cards import platform_display_label
-from backend.read_models.opportunity_board_data import breakdowns, latest_verifications, verifications
+from backend.read_models.opportunity_board_data import (
+    author_urls, board_rows, breakdown_stages, breakdowns, display_titles, latest_verifications, verifications,
+)
 from backend.read_models.opportunity_board_types import (
     BoardColumn, BoardData, BreakdownHistoryRow, OpportunityDetail, OpportunityItem, OpportunityPage, TimelineEntry,
 )
 
 
 def board_items(base_dir: Path, include_observe: bool = False, *, now: datetime | None = None, include_unstaged: bool = False) -> list[OpportunityItem]:
-    rows = breakdowns(base_dir)
+    rows = board_rows(base_dir)
     events = OpportunityFollowUpRepository(base_dir).latest([row["card_id"] for row in rows])
     records = verifications(base_dir)
     verified, counts = latest_verifications(records), Counter(row["card_id"] for row in records)
+    stages = breakdown_stages(rows, events, verified, include_observe, now=now, include_unstaged=include_unstaged)
     result: list[OpportunityItem] = []
     for row in rows:
         card_id = row["card_id"]
         event, verification = events.get(card_id), verified.get(card_id)
-        stage = derive_stage(row["next_step"], row["created_at"], event, verification, include_observe, now=now)
-        if stage["stage"] is None and not include_unstaged:
+        if card_id not in stages:
             continue
         result.append({"card_id": card_id, "candidate_kind": row["candidate_kind"], "title": row["title"], "offer": row["offer"],
             "author": row["author"], "platform": row["platform"], "source_name": row["source_name"],
-            "source_url": row["source_url"], "published_at": row["published_at"], "author_url": row["author_url"],
+            "source_url": row["source_url"], "published_at": row["published_at"], "author_url": None,
             "monetization_model": row["monetization_model"], "replicability": row["replicability"],
             "credibility": row["credibility"], "next_step": row["next_step"], "created_at": row["created_at"],
-            **stage,
+            **stages[card_id],
             "platform_label": platform_display_label(row["platform"]),
             "model_label": ENUM_MEANINGS["monetization_model"][row["monetization_model"]],
             "risk_flags": [risk for risk in row["risk_flags"] if risk != "unverifiable"],
             "risk_labels": [ENUM_MEANINGS["risk_flags"][risk] for risk in row["risk_flags"] if risk != "unverifiable"],
-            "question_count": len(row["verify_questions"]), "verification_count": counts[card_id],
+            "question_count": row["question_count"], "verification_count": counts[card_id],
             "latest_verification": {"conclusion": verification["conclusion"], "credibility": verification["credibility"],
                 "contacted_on": verification["contacted_on"], "doubts": verification["doubts"],
                 "created_at": verification["created_at"]} if verification else None,
             "follow_up_reason": event["reason"] if event else None})
     return result
+
+
+def _repair_titles(base_dir: Path, items: list[OpportunityItem]) -> None:
+    titles = display_titles(base_dir, [(item["card_id"], item["platform"]) for item in items])
+    for item in items:
+        if item["card_id"] in titles:
+            item["title"] = titles[item["card_id"]]
+
+
+def _fill_author_urls(base_dir: Path, items: list[OpportunityItem]) -> None:
+    urls = author_urls(base_dir, [item["card_id"] for item in items])
+    for item in items:
+        item["author_url"] = urls[item["card_id"]]
+
+
+def _matches(item: OpportunityItem, query: str) -> bool:
+    return query.casefold() in " ".join(str(item[field]) for field in
+        ("card_id", "title", "offer", "author", "source_name") if item[field] is not None).casefold()
 
 
 @shared_read_connection
@@ -58,9 +78,10 @@ def board(base_dir: Path | str, platform: str | None = None, monetization_model:
     platforms = sorted({item["platform"] for item in items})
     filtered = [item for item in items if (platform is None or item["platform"] == platform)
         and (candidate_kind is None or item["candidate_kind"] == candidate_kind)
-        and (monetization_model is None or item["monetization_model"] == monetization_model)
-        and (query is None or query.casefold() in " ".join(
-            str(item[field]) for field in ("card_id", "title", "offer", "author", "source_name") if item[field] is not None).casefold())]
+        and (monetization_model is None or item["monetization_model"] == monetization_model)]
+    if query is not None:
+        _repair_titles(base_dir, filtered)
+        filtered = [item for item in filtered if _matches(item, query)]
     columns: dict[str, BoardColumn] = {}
     for stage in STAGES:
         group = [item for item in filtered if item["stage"] == stage]
@@ -71,6 +92,10 @@ def board(base_dir: Path | str, platform: str | None = None, monetization_model:
             group.sort(key=lambda item: (parse_utc(cast(str, item["stage_since"])), item["card_id"]), reverse=True)
         columns[stage] = {"count": len(group), "items": group[inbox_offset:inbox_offset + inbox_limit]
             if stage == "inbox" else group}
+    shown = [item for column in columns.values() for item in column["items"]]
+    if query is None:
+        _repair_titles(base_dir, shown)
+    _fill_author_urls(base_dir, shown)
     return {"columns": columns, "today": {
         "inbox": sum(item["stage"] == "inbox" and now - parse_utc(item["created_at"]) < timedelta(days=1)
                      for item in filtered),
@@ -85,17 +110,23 @@ def all_opportunities(base_dir: Path | str, *, platform: str | None = None,
                       monetization_model: str | None = None, query: str | None = None,
                       next_step: str | None = None, stage: str | None = None,
                       candidate_kind: CandidateKind | None = None, limit: int = 20, offset: int = 0) -> OpportunityPage:
-    items = board_items(Path(base_dir), True, include_unstaged=True)
+    base_dir = Path(base_dir)
+    items = board_items(base_dir, True, include_unstaged=True)
     platforms = sorted({item["platform"] for item in items})
     filtered = [item for item in items if (platform is None or item["platform"] == platform)
         and (monetization_model is None or item["monetization_model"] == monetization_model)
         and (next_step is None or item["next_step"] == next_step)
         and (candidate_kind is None or item["candidate_kind"] == candidate_kind)
-        and (stage is None or (item["stage"] is None if stage == "unstaged" else item["stage"] == stage))
-        and (query is None or query.casefold() in " ".join(str(item[field])
-            for field in ("card_id", "title", "offer", "author", "source_name") if item[field] is not None).casefold())]
+        and (stage is None or (item["stage"] is None if stage == "unstaged" else item["stage"] == stage))]
+    if query is not None:
+        _repair_titles(base_dir, filtered)
+        filtered = [item for item in filtered if _matches(item, query)]
     filtered.sort(key=lambda item: (parse_utc(item["created_at"]), item["card_id"]), reverse=True)
-    return {"items": filtered[offset:offset + limit], "total": len(filtered), "limit": limit, "offset": offset,
+    page = filtered[offset:offset + limit]
+    if query is None:
+        _repair_titles(base_dir, page)
+    _fill_author_urls(base_dir, page)
+    return {"items": page, "total": len(filtered), "limit": limit, "offset": offset,
         "platforms": [{"platform": value, "label": platform_display_label(value)} for value in platforms],
         "models": ENUM_MEANINGS["monetization_model"]}
 

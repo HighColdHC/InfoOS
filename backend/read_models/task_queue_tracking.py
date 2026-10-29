@@ -126,25 +126,45 @@ def task_tracking_page(
         clauses.append("status = ?")
         params.append(status)
     where = " and ".join(clauses)
+    select = f"""select task_id, task_type, target_kind, target_id, status,
+                        queue_name, priority, deadline_at, claimed_by,
+                        created_at, started_at, finished_at, updated_at, artifacts_summary
+                 from tasks where {where}"""
+    active_order = """case status when 'running' then 0 else 1 end,
+                      priority, deadline_at, created_at desc, task_id"""
+    finished_order = "created_at desc, task_id"
+    page_limit, page_offset = max(1, limit), max(0, offset)
     with connect_existing(resolve_sqlite_path(base_dir)) as conn:
+        # Counts and both page segments must describe the same queue snapshot.
+        conn.execute("begin")
         total_row = conn.execute(
             f"select count(*) as total from tasks where {where}", tuple(params)
         ).fetchone()
         total = cast(TrackingTotalRow, dict(total_row))["total"]
-        rows = conn.execute(
-            f"""
-            select task_id, task_type, target_kind, target_id, status,
-                   queue_name, priority, deadline_at, claimed_by,
-                   created_at, started_at, finished_at, updated_at, artifacts_summary
-            from tasks
-            where {where}
-            order by
-              case status when 'running' then 0 when 'pending' then 1 else 2 end,
-              priority, deadline_at, created_at desc, task_id
-            limit ? offset ?
-            """,
-            (*params, max(1, limit), max(0, offset)),
-        ).fetchall()
+        if status:
+            ordering = active_order if status in {"running", "pending"} else finished_order
+            rows = conn.execute(
+                f"{select} order by {ordering} limit ? offset ?",
+                (*params, page_limit, page_offset),
+            ).fetchall()
+        else:
+            active = "status in ('running', 'pending')"
+            active_total = conn.execute(
+                f"select count(*) from tasks where {where} and {active}", params,
+            ).fetchone()[0]
+            rows = []
+            if page_offset < active_total:
+                rows = conn.execute(
+                    f"{select} and {active} order by {active_order} limit ? offset ?",
+                    (*params, page_limit, page_offset),
+                ).fetchall()
+            remaining = page_limit - len(rows)
+            if remaining:
+                rows.extend(conn.execute(
+                    f"{select} and status not in ('running', 'pending') "
+                    f"order by {finished_order} limit ? offset ?",
+                    (*params, remaining, max(0, page_offset - active_total)),
+                ).fetchall())
     now_text = format_utc_seconds_z(parse_utc_or_none(evaluated_at) or datetime.now(timezone.utc))
     task_rows = [cast(TrackingTaskRow, dict(row)) for row in rows]
     items: list[TrackingItem] = [

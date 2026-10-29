@@ -20,6 +20,8 @@ from backend.app.main import create_app
 def test_web_app_serves_frontend_dist_when_present(tmp_path):
     frontend_dist = tmp_path / "frontend" / "dist"
     frontend_dist.mkdir(parents=True)
+    (frontend_dist / "assets").mkdir()
+    (frontend_dist / "assets" / "app.js").write_text("console.log('ok')", encoding="utf-8")
     (frontend_dist / "index.html").write_text(
         '<div id="root">InfoOS SaaS Frontend</div><script type="module" src="/assets/app.js"></script>',
         encoding="utf-8",
@@ -30,10 +32,13 @@ def test_web_app_serves_frontend_dist_when_present(tmp_path):
     page = client.get("/")
     detail = client.get("/cards/card_demo")
     reader = client.get("/r/card/card_demo")
+    asset = client.get("/assets/app.js")
 
     assert page.status_code == 200
     assert detail.status_code == 404
     assert reader.status_code == 200
+    assert page.headers["cache-control"] == reader.headers["cache-control"] == "no-cache"
+    assert asset.headers["cache-control"] == "public, max-age=31536000, immutable"
     assert "InfoOS SaaS Frontend" in page.text
     assert "InfoOS SaaS Frontend" in reader.text
 

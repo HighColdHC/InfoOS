@@ -34,11 +34,13 @@ def load_source_card_facts(
     if source_ids == []:
         return {}, set()
     condition = "source_id is not null"
-    block_condition = ""
+    # Keep this predicate identical to the v0023 partial-index predicate.
+    block_condition = """where (instr(lower(coalesce(provenance, '')), 'metadata_fallback') > 0
+                            or lower(status) in ('failed', 'error', 'blocked', 'pending'))"""
     params = source_ids or []
     if source_ids is not None:
         condition += f" and source_id in ({', '.join('?' for _ in source_ids)})"
-        block_condition = f"where card_id in (select card_id from cards where {condition})"
+        block_condition += f" and card_id in (select card_id from cards where {condition})"
         params = params + params
     # Materialize only these two per-card facts before grouping by source.
     # Subtitle fallback is block metadata; card payloads have no top-level flag.

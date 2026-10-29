@@ -1,5 +1,6 @@
 """HEAD reference implementations and SQL read-path equivalence tests."""
 from pathlib import Path
+import shutil
 from typing import Any
 
 import pytest
@@ -221,8 +222,10 @@ def legacy_card_detail(base_dir: Path | str, card_id: str) -> dict[str, Any] | N
 
 
 
-@pytest.fixture
-def catalog_seed(tmp_path):
+@pytest.fixture(scope='session')
+def _catalog_template(tmp_path_factory, runtime_storage_template):
+    tmp_path = tmp_path_factory.mktemp('catalog-template')
+    shutil.copytree(runtime_storage_template, tmp_path, dirs_exist_ok=True)
     for source_id in ('source-a', 'source-b', 'empty-time', ''):
         SourceRepository(tmp_path).upsert_source({
             'source_id': source_id, 'platform': 'rss', 'source_type': 'feed',
@@ -282,6 +285,13 @@ def catalog_seed(tmp_path):
             conn.execute(f'update cards set {assignments} where card_id = ?', (f'card-{index:02}',))
         conn.execute("update card_assets set cleanup_state = '' where card_id = 'card-13'")
         conn.execute("update card_assets set status = 'pending' where card_id = 'card-14'")
+    return tmp_path
+
+
+@pytest.fixture
+def catalog_seed(_catalog_template, tmp_path):
+    # Each test gets an independent database and assets; only construction is shared.
+    shutil.copytree(_catalog_template, tmp_path, dirs_exist_ok=True)
     return tmp_path
 
 

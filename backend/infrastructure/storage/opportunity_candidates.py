@@ -55,14 +55,8 @@ class OpportunityContextRow(TypedDict):
 PREFILTER = """case when json_type(r.raw_payload, '$.prefilter') is not null
     then json_extract(r.raw_payload, '$.prefilter')
     else json_extract(r.raw_payload, '$.raw_metadata.prefilter') end"""
-PREFILTER_CANDIDATE = """((json_type(r.raw_payload, '$.prefilter.status') in ('text')
-    and json_extract(r.raw_payload, '$.prefilter.status') in ('matched','unknown'))
-    or (json_type(r.raw_payload, '$.prefilter') is null
-    and json_extract(r.raw_payload, '$.raw_metadata.prefilter.status') in ('matched','unknown')))"""
-WIND_VANE_CANDIDATE = """(s.platform='zsxq' and (s.source_type='opportunity'
-        or (json_type(r.raw_payload, '$.raw_metadata.tags')='array' and exists (
-            select 1 from json_each(r.raw_payload, '$.raw_metadata.tags') tag
-            where tag.type='text' and instr(tag.value, '风向标') > 0))))"""
+PREFILTER_CANDIDATE = "f.prefilter_candidate=1"
+WIND_VANE_CANDIDATE = "(s.platform='zsxq' and (s.source_type='opportunity' or f.wind_vane_tagged=1))"
 CASE_CANDIDATE = """exists(select 1 from card_evaluations e where e.evaluation_id=(
     select latest.evaluation_id from card_evaluations latest where latest.card_id=c.card_id
     order by latest.created_at desc, latest.evaluation_id desc limit 1)
@@ -73,6 +67,7 @@ CANDIDATE_KIND = f"""case when {PREFILTER_CANDIDATE} then 'prefilter'
 ENTRY_JOIN = """raw_items r indexed by idx_raw_items_first_seen_source
     cross join cards c indexed by idx_cards_opportunity_raw
     on c.raw_connector_id=r.connector_id and c.raw_item_id=r.raw_item_id
+    join raw_item_candidate_flags f on f.connector_id=r.connector_id and f.raw_item_id=r.raw_item_id
     left join sources s on s.source_id=r.source_id"""
 CURRENT_BREAKDOWN = """exists(select 1 from opportunity_breakdowns b where b.card_id=c.card_id
     and b.breakdown_id=(select n.breakdown_id from opportunity_breakdowns n where n.card_id=c.card_id
@@ -106,6 +101,7 @@ class OpportunityCandidateRepository(InfoOSRepository):
         row = conn.execute(f"""select r.raw_payload, r.revision as raw_item_revision, s.platform, s.source_type,
             {CANDIDATE_KIND} as candidate_kind from cards c
             join raw_items r on r.connector_id=c.raw_connector_id and r.raw_item_id=c.raw_item_id
+            join raw_item_candidate_flags f on f.connector_id=r.connector_id and f.raw_item_id=r.raw_item_id
             left join sources s on s.source_id=r.source_id where c.card_id=?""", (card_id,)).fetchone()
         return {**cast(OpportunityContextRow, dict(row)), "raw_payload": json.loads(row["raw_payload"])} if row else None
 

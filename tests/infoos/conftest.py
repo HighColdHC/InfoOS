@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import sys
+import shutil
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -39,11 +41,24 @@ def same_origin_test_client(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(TestClient, "__init__", _same_origin_init)
 
 
+@pytest.fixture(scope="session")
+def runtime_storage_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    template = tmp_path_factory.mktemp("runtime-storage-template")
+    database = initialize_runtime_storage(template)
+    conn = sqlite3.connect(database)
+    try:
+        conn.execute("pragma wal_checkpoint(truncate)")
+    finally:
+        conn.close()
+    return template
+
+
 @pytest.fixture(autouse=True)
 def bootstrap_runtime_storage(request: pytest.FixtureRequest, tmp_path: Path) -> None:
     """Explicitly provide the runtime schema expected by ordinary tests."""
     if request.node.get_closest_marker("no_storage_bootstrap") is None:
-        initialize_runtime_storage(tmp_path)
+        template = request.getfixturevalue("runtime_storage_template")
+        shutil.copytree(template, tmp_path, dirs_exist_ok=True)
 
 
 @pytest.fixture(autouse=True)

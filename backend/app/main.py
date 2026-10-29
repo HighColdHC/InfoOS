@@ -12,19 +12,32 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from pathlib import Path
+from os import PathLike, stat_result
 from threading import Lock
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
+from starlette.types import Scope
 
 from backend.api.main import api_router
 from backend.api.mcp.auth import McpBearerMiddleware
 from backend.api.mcp.server import create_mcp_server
 from backend.api.middleware.plugin_request_audit import PluginRequestAuditMiddleware
 from backend.api.security import SameOriginManagementMiddleware
+from backend.app.gzip import SelectiveGZipMiddleware
 from backend.infrastructure.storage.paths import data_dir
 from backend.infrastructure.storage.bootstrap import initialize_runtime_storage
 from backend.infrastructure.observability.logging import configure_logging, get_logger
+
+
+class CachedFrontendAssets(StaticFiles):
+    def file_response(
+        self, full_path: PathLike, stat_result: stat_result, scope: Scope, status_code: int = 200
+    ) -> Response:
+        response = super().file_response(full_path, stat_result, scope, status_code)
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
 
 
 def create_app(base_dir: Path | str = ".") -> FastAPI:
@@ -50,13 +63,14 @@ def create_app(base_dir: Path | str = ".") -> FastAPI:
     app.add_middleware(McpBearerMiddleware)
     app.add_middleware(PluginRequestAuditMiddleware)
     app.add_middleware(SameOriginManagementMiddleware)
+    app.add_middleware(SelectiveGZipMiddleware)
     app.include_router(api_router)
     frontend_dist_dir = app_base_dir / "frontend" / "dist"
     frontend_assets_dir = frontend_dist_dir / "assets"
     if frontend_assets_dir.exists():
         app.mount(
             "/assets",
-            StaticFiles(directory=str(frontend_assets_dir)),
+            CachedFrontendAssets(directory=str(frontend_assets_dir)),
             name="frontend-assets",
         )
     app.mount("/", mcp_app, name="mcp")

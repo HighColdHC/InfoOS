@@ -63,7 +63,22 @@ def drop_v15_schema(conn: sqlite3.Connection) -> None:
             conn.execute(f'alter table cards drop column {column}')
 
 
+def drop_v24_schema(conn: sqlite3.Connection) -> None:
+    from backend.infrastructure.storage.migrations.v0024_candidate_flags import TRIGGERS
+    for name in TRIGGERS:
+        conn.execute(f'drop trigger if exists {name}')
+    conn.execute('drop table if exists raw_item_candidate_flags')
+
+
+def drop_v23_indexes(conn: sqlite3.Connection) -> None:
+    drop_v24_schema(conn)
+    for name in ("idx_tasks_queue_created", "idx_card_content_blocks_degraded_flags",
+                 "idx_card_evaluations_passed_relevance"):
+        conn.execute(f"drop index if exists {name}")
+
+
 def drop_v21_schema(conn: sqlite3.Connection) -> None:
+    drop_v23_indexes(conn)
     for table in ("knowledge_status_events", "knowledge_evidence", "knowledge_cards", "knowledge_extractions"):
         conn.execute(f"drop table if exists {table}")
     columns = {row[1] for row in conn.execute("pragma table_info(card_evaluations)")}

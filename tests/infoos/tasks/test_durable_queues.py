@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 import sqlite3
 
+import pytest
+
 from backend.application.tasks.repository import TaskRepository
 from backend.application.tasks.types import Task, TaskQueue, TaskStatus, TaskType
 from backend.infrastructure.storage.repositories import CardRepository, SourceRepository
@@ -211,3 +213,48 @@ def test_global_task_tracking_page_includes_non_source_tasks(tmp_path: Path) -> 
     assert page["next_offset"] is None
     assert page["items"][0]["task_id"] == "export"
     assert page["items"][0]["queue_name"] == "maintenance_io"
+
+
+@pytest.mark.parametrize("queue_name", [None, "public_fetch", "card_pipeline", "missing"])
+@pytest.mark.parametrize("status", [None, "running", "pending", "success", "failed"])
+def test_task_tracking_pages_across_active_and_finished_segments(tmp_path, queue_name, status):
+    repo = TaskRepository.for_base_dir(tmp_path)
+    # Expected global order: running (priority before recency), pending, then
+    # completed tasks by recency and ID, regardless of priority/deadline.
+    ordered = [
+        ("running-old", "running", "public_fetch", 1, "01"),
+        ("running-new", "running", "card_pipeline", 9, "02"),
+        ("pending", "pending", "public_fetch", 0, "03"),
+        ("finished-a", "success", "public_fetch", 9, "08"),
+        ("finished-b", "failed", "card_pipeline", 8, "08"),
+        ("finished-c", "success", "public_fetch", 7, "06"),
+        ("finished-d", "skipped", "card_pipeline", 6, "05"),
+        ("finished-old", "success", "public_fetch", 0, "01"),
+    ]
+    for task_id, task_status, queue, priority, day in reversed(ordered):
+        repo.enqueue(Task(task_id, TaskType.DATA_EXPORT, "export", "backup"))
+        with sqlite3.connect(resolve_sqlite_path(tmp_path)) as conn:
+            conn.execute(
+                """update tasks set status=?, queue_name=?, priority=?,
+                       created_at=?, deadline_at=? where task_id=?""",
+                (task_status, queue, priority, f"2026-07-{day}T00:00:00Z",
+                 f"2026-07-{day}T01:00:00Z", task_id),
+            )
+    expected = [row[0] for row in ordered
+                if (queue_name is None or row[2] == queue_name)
+                and (status is None or row[1] == status)]
+    actual = []
+    offset = 0
+    while True:
+        page = task_tracking_page(tmp_path, limit=2, offset=offset,
+                                  queue_name=queue_name, status=status, evaluated_at=NOW)
+        assert page["total"] == len(expected)
+        assert [row["task_id"] for row in page["items"]] == expected[offset:offset + 2]
+        actual.extend(row["task_id"] for row in page["items"])
+        expected_next = offset + 2 if offset + 2 < len(expected) else None
+        assert page["next_offset"] == expected_next
+        if expected_next is None:
+            break
+        offset = expected_next
+    assert actual == expected
+    assert task_tracking_page(tmp_path, offset=100, queue_name=queue_name, status=status)["items"] == []

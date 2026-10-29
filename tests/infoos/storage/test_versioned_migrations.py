@@ -44,6 +44,8 @@ V0008_TABLES = {"interest_profiles", "card_evaluations", "daily_briefs"}
 V0009_INDEXES = {"idx_cards_active_raw"}
 V0012_INDEXES = {"idx_cards_opportunity_raw"}
 V0008_INDEXES = {"idx_card_evaluations_window", "idx_card_evaluations_card_latest"}
+V0023_INDEXES = {"idx_tasks_queue_created", "idx_card_content_blocks_degraded_flags",
+                 "idx_card_evaluations_passed_relevance"}
 
 
 def _snapshot_structure(db: Path) -> dict[str, object]:
@@ -75,10 +77,10 @@ def _snapshot_structure(db: Path) -> dict[str, object]:
 
 def _without_v0003_indexes(snapshot: dict[str, object]) -> dict[str, object]:
     indexes = dict(snapshot["indexes"])
-    for name in V0003_INDEXES | V0004_INDEXES | V0008_INDEXES | V0009_INDEXES | V0012_INDEXES | {"idx_raw_items_first_seen_source", "idx_cards_status_sort", "idx_cards_status_published"}:
+    for name in V0003_INDEXES | V0004_INDEXES | V0008_INDEXES | V0009_INDEXES | V0012_INDEXES | V0023_INDEXES | {"idx_raw_items_first_seen_source", "idx_cards_status_sort", "idx_cards_status_published"}:
         indexes.pop(name, None)
     later_tables = V0004_TABLES | V0005_TABLES | V0008_TABLES | {"source_change_audit", "opportunity_breakdowns", "opportunity_verifications", "notification_outbox", "auth_qr_rounds", "opportunity_follow_up_events"}
-    later_tables.add("reader_page_views")
+    later_tables |= {"reader_page_views", "raw_item_candidate_flags"}
     later_tables |= {"knowledge_cards", "knowledge_extractions", "knowledge_evidence", "knowledge_status_events"}
     later_tables |= {name for name in snapshot['columns'] if name.startswith(('card_text_fts', 'card_block_text_fts'))}
     indexes = {name: value for name, value in indexes.items() if value[0] not in later_tables}

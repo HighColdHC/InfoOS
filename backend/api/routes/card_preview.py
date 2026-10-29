@@ -162,7 +162,7 @@ def api_card_preview_asset(
         return FileResponse(
             target,
             media_type=media_type,
-            headers={"Accept-Ranges": "bytes"},
+            headers={"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=604800"},
         )
     try:
         start, end = parse_single_range(range_header, size)
@@ -182,6 +182,7 @@ def api_card_preview_asset(
             "Accept-Ranges": "bytes",
             "Content-Range": f"bytes {start}-{end}/{size}",
             "Content-Length": str(length),
+            "Cache-Control": "private, max-age=604800",
         },
     )
 

@@ -2,6 +2,32 @@
 
 B1 起，`backend/infrastructure/storage/migrations/` 是 SQLite 结构与历史回填的迁移来源。已发布的 `v0001_core.sql`、`v0001_collector.sql` 和各编号迁移不可改写；旧的 `storage/schema.sql` 与 `storage/schema_collector.sql` 已由冻结基线取代。CRUD 与事务规则仍见 `sqlite-crud-playbook.md`。
 
+## v0024：机会候选标记侧表
+
+`v0024_candidate_flags.sql` 新增 `raw_item_candidate_flags`，以原料 `(connector_id, raw_item_id)` 为复合主键、`WITHOUT ROWID` 保存 `prefilter_candidate` 与 `wind_vane_tagged` 两个非空 0/1 标记，外键指向 `raw_items` 并级联删除。SQL 模板由同名 Python 迁移模块展开，回填与两个触发器复用该模块冻结的 v23 JSON 判定常量，不复制判定规则。
+
+`raw_items` 的 `AFTER INSERT` 和 `AFTER UPDATE OF raw_payload` 触发器在原写事务内覆盖侧表行，任意 SQLite 连接写入都生效；应用写入代码不变。迁移在单个写事务中解析全部既有原料并 `INSERT ... SELECT` 回填侧表，不改写 `raw_items` 大行，侧表、触发器、回填及 `user_version=24` 一起提交或回滚。重复启动只校验结构，不重复回填；表的列、主键、外键、`WITHOUT ROWID` 与两个触发器均纳入结构漂移检查。
+
+触发器使用显式 `ON CONFLICT (connector_id, raw_item_id) DO UPDATE`，兼容原料仓库已有的 UPSERT 更新路径；不使用会被外层冲突策略覆盖的 `INSERT OR REPLACE`。
+
+候选分页、统计、看板、列表、详情上下文与 watchdog 从侧表按主键点查。顶层 `prefilter` 优先于 `raw_metadata.prefilter`（包括顶层 JSON null）、风向标标签的文本子串判定和候选优先级保持不变；平台与 `source_type` 仍从 `sources` 实时读取，case 候选仍取每卡最新评估。分页证据摘要仍只为返回行读取原 JSON。返回字段、顺序、筛选与候选语义不变；已有拆解在缺少关联原料时仍保留在列表中。
+
+每次原料插入或 payload 更新多解析一次 JSON 并维护一行侧表及其主键 B-tree；删除原料时级联删除侧表行。首次回填需要扫描原料 JSON，持有写锁并增加侧表及 WAL 空间，应预留部署窗口与可验证恢复点。发布须使用 `--update-kind data-migration`，先在一致性备份副本上预演并记录耗时，再验收真实数据的完整输出与性能；旧镜像不能直接打开 v24 数据卷，回退使用部署恢复点。
+
+## v0023：读路径索引
+
+`v0023_read_path_indexes.sql` 只新增三棵索引，不回填或修改业务行：
+
+| 索引 | 服务的读取 | 写入代价 |
+|---|---|---|
+| `idx_tasks_queue_created(queue_name, created_at DESC, task_id)` | 任务追踪按队列读取已结束任务，按创建时间倒序分页 | 每条任务插入/删除及队列、创建时间或 ID 更新维护一棵 B-tree |
+| `idx_card_content_blocks_degraded_flags(card_id, status, provenance)` | 来源管理仅聚合含 `metadata_fallback` 或状态为 failed/error/blocked/pending 的内容块 | 只收录带标记内容块；插入、删除及状态、provenance、card_id 更新可能维护部分索引 |
+| `idx_card_evaluations_passed_relevance(passed_quality, relevance DESC, quality DESC)` | 过线卡片的推荐排序从评估分数分页，并校验每卡最新评估 | 每条评估插入/删除及过线标记、相关性、质量更新维护一棵 B-tree |
+
+任务追踪先列 running，再列 pending，各自保留优先级、截止时间、创建时间倒序及任务 ID 顺序；已结束任务改按 `created_at DESC, task_id` 排序。返回字段、总数及筛选语义不变。来源卡片计数与降级判定不变；推荐排序保留最新评估、全部筛选条件与原有同分排序，其他排序和 count 查询不变。三个性能索引及部分索引条件纳入结构漂移检查，一般性能索引差异按现有规则告警。
+
+迁移在一个写事务中建索引，tasks 历史越多，锁占用与磁盘成本越高。发布须使用 `--update-kind data-migration`，先在一致性备份副本上预演并记录建索引耗时，预留部署窗口与可验证恢复点；旧镜像不能直接打开 v23 数据卷。真实性能与结果一致性须在业务数据副本上验收。
+
 ## v0022：退役内置 LLM 熔断清理
 
 `v0022_retire_llm_circuits.sql` 删除全部 `provider` 熔断，以及已退役的 `scys` / `wechat` 平台熔断。每条删除在同一迁移事务内追加一条 `task_events.runtime_circuit_retired` 审计，保存 scope、原状态、原因代码和失败次数，不保存配置或凭据。版本提交与审计、删除一起回滚；重复启动无重复审计。历史任务事件保持可读，不因旧 provider 事件把当前状态判为异常。

@@ -10,7 +10,7 @@ from backend.read_models.plugin_sources import (
     read_plugin_source_page,
 )
 
-from tests.infoos.read_models.test_plugin_card_queries import catalog_seed, legacy_card_stats, legacy_card_page
+from tests.infoos.read_models.test_plugin_card_queries import _catalog_template, catalog_seed, legacy_card_stats, legacy_card_page
 from backend.read_models.plugin_sources import _stable_card_stats
 from backend.read_models.plugin_cards import read_plugin_card_page
 

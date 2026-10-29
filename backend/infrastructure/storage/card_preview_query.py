@@ -130,12 +130,23 @@ def read_preview_rows(
         # reading c.sort_ts would traverse each hit's raw_payload overflow pages.
         page_from = ("cards k indexed by idx_cards_status_sort "
                      "cross join cards c on c.rowid = k.rowid")
+    page_join = join
+    if sort == "relevance_desc" and evaluation == "passed":
+        # Walk scores first; LIMIT can stop after sorting only the tied scores.
+        page_from = ("card_evaluations e indexed by idx_card_evaluations_passed_relevance "
+                     "join cards c on c.card_id = e.card_id")
+        page_join = ""
+        page_where = where + """ and e.evaluation_id = (
+            select latest.evaluation_id from card_evaluations latest
+            where latest.card_id = c.card_id
+            order by latest.created_at desc, latest.evaluation_id desc limit 1)"""
+        ordering = "e.relevance desc, e.quality desc, c.sort_ts desc, c.card_id desc"
     with repo.connect_existing() as conn:
         # Both statements share a read snapshot, including concurrent finalize writes.
         conn.execute("begin")
         total = conn.execute(f"select count(*) from cards c {join} where {where}", params).fetchone()[0]
         page_ids = [row[0] for row in conn.execute(
-            f"select c.card_id from {page_from} {join} where {page_where} order by {ordering} limit ? offset ?",
+            f"select c.card_id from {page_from} {page_join} where {page_where} order by {ordering} limit ? offset ?",
             [*params, limit, offset])]
         by_id = {}
         if page_ids:

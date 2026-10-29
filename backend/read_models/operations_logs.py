@@ -79,12 +79,12 @@ def read_operations_log_page(
         "offset": bounded_offset,
         "next_offset": consumed if consumed < len(filtered) else None,
     }
-    return cast(OperationsLogPage, redact_secrets(payload))
+    return payload
 
 
 def read_operations_log_detail(base_dir: Path | str, log_id: str) -> LogRecord | None:
     record = next((item for item in _all_records(base_dir) if item["log_id"] == log_id), None)
-    return cast(LogRecord, redact_secrets(record)) if record is not None else None
+    return record
 
 
 def valid_log_level(value: str) -> bool:
@@ -134,8 +134,11 @@ def _interface_record(item: ApiRequestLogRow) -> LogRecord:
         "task_id": None,
         "worker_id": None,
     }
-    record: LogRecord = {**fields, "log_id": stable_log_id(fields, namespace="interface")}
-    return cast(LogRecord, redact_secrets(record))
+    log_id = stable_log_id(fields, namespace="interface")
+    other_fields = {key: value for key, value in fields.items() if key != "message"}
+    redacted_fields = redact_secrets(other_fields)
+    record = {key: message if key == "message" else redacted_fields[key] for key in fields}
+    return cast(LogRecord, {**record, "log_id": log_id})
 
 
 def _matches(

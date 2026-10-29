@@ -9,17 +9,24 @@ import sqlite3
 import time
 from typing import Any
 
-from . import v0001_baseline, v0002_legacy_backfills, v0003_task_read_indexes, v0010_captured_at_backfill, v0015_card_read_keys
+from . import (
+    v0001_baseline, v0002_legacy_backfills, v0003_task_read_indexes,
+    v0010_captured_at_backfill, v0015_card_read_keys, v0024_candidate_flags,
+)
 from .v0001_baseline import SchemaDriftError as SchemaDriftError
 from .v0002_legacy_backfills import LegacyMigrationMarkerError as LegacyMigrationMarkerError
 
 
-LATEST_VERSION = 22
+LATEST_VERSION = 24
 DEFAULT_BATCH_SIZE = v0002_legacy_backfills.DEFAULT_BATCH_SIZE
 ProgressCallback = Callable[[dict[str, Any]], None]
 
 
-def _validate_latest_schema(conn: sqlite3.Connection, *, include_v15: bool = True, include_v16: bool = True, include_v17: bool = True, include_v19: bool = False, include_v21: bool = False) -> list[str]:
+def _validate_latest_schema(
+    conn: sqlite3.Connection, *, include_v15: bool = True, include_v16: bool = True,
+    include_v17: bool = True, include_v19: bool = False, include_v21: bool = False,
+    include_v23: bool = False, include_v24: bool = False,
+) -> list[str]:
     statements = [
         *v0001_baseline._statements(),
         *(sql + ";" for _name, sql in v0003_task_read_indexes.INDEXES),
@@ -44,10 +51,16 @@ def _validate_latest_schema(conn: sqlite3.Connection, *, include_v15: bool = Tru
         statements.extend(_sql_statements("v0019_reader_page_views.sql"))
     if include_v21:
         statements.extend(_sql_statements("v0021_knowledge_cards.sql"))
+    if include_v23:
+        statements.extend(_sql_statements("v0023_read_path_indexes.sql"))
+    if include_v24:
+        statements.extend(v0024_candidate_flags.SCHEMA_STATEMENTS)
     warnings = v0001_baseline.validate_schema(conn, statements=statements)
     if include_v15:
         v0015_card_read_keys.validate(conn)
     v0003_task_read_indexes.validate(conn)
+    if include_v24:
+        v0024_candidate_flags.validate(conn)
     return warnings
 
 
@@ -199,7 +212,7 @@ def migrate_database(
                 if current > LATEST_VERSION:
                     raise DatabaseVersionTooNew(path, current)
                 if current == LATEST_VERSION:
-                    warnings = _validate_latest_schema(conn, include_v19=True, include_v21=True)
+                    warnings = _validate_latest_schema(conn, include_v19=True, include_v21=True, include_v23=True, include_v24=True)
                     schema_validated = True
                     if warnings:
                         event = {
@@ -381,6 +394,20 @@ def migrate_database(
                         conn.execute(statement)
                     conn.execute("pragma user_version = 22")
                     event = {"migration": 22, "phase": "retire_llm_circuits", "rows": 0, "complete": True}
+                elif current == 22:
+                    _validate_latest_schema(conn, include_v19=True, include_v21=True)
+                    for statement in _sql_statements("v0023_read_path_indexes.sql"):
+                        conn.execute(statement)
+                    _validate_latest_schema(conn, include_v19=True, include_v21=True, include_v23=True)
+                    conn.execute("pragma user_version = 23")
+                    event = {"migration": 23, "phase": "read_path_indexes", "rows": 0, "complete": True}
+                elif current == 23:
+                    _validate_latest_schema(conn, include_v19=True, include_v21=True, include_v23=True)
+                    for statement in v0024_candidate_flags.STATEMENTS:
+                        conn.execute(statement)
+                    _validate_latest_schema(conn, include_v19=True, include_v21=True, include_v23=True, include_v24=True)
+                    conn.execute("pragma user_version = 24")
+                    event = {"migration": 24, "phase": "candidate_flags", "rows": 0, "complete": True}
                 else:
                     raise DatabaseMigrationError(f"unsupported database version {current} at {path}")
                 if progress_callback is not None:

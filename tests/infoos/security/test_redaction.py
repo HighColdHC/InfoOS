@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from backend.infrastructure.security.redaction import REDACTED, redact_secrets
+from backend.infrastructure.security.redaction import REDACTED, redact_secrets, redact_text
 
 
 def test_redaction_covers_nested_keys_and_inline_credentials(monkeypatch, tmp_path: Path) -> None:
@@ -34,3 +34,12 @@ def test_redaction_covers_nested_keys_and_inline_credentials(monkeypatch, tmp_pa
 
 def test_redaction_keeps_safe_masked_token_prefix() -> None:
     assert redact_secrets("ios_abcd1234…") == "ios_abcd1234…"
+
+
+def test_redaction_updates_cached_roots_when_environment_changes(monkeypatch, tmp_path: Path) -> None:
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    monkeypatch.setenv("INFOOS_DATA_HOME", str(first))
+    assert redact_text(f"{first}/file") == "<INFOOS_DATA_HOME>/file"
+    monkeypatch.setenv("INFOOS_DATA_HOME", str(second))
+    assert redact_text(f"{second}/file") == "<INFOOS_DATA_HOME>/file"

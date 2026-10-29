@@ -16,8 +16,9 @@ from backend.infrastructure.storage.interest_profiles import InterestProfileRepo
 from backend.infrastructure.storage.opportunity_candidates import CANDIDATE, CURRENT_BREAKDOWN, ENTRY_JOIN
 from backend.read_models._connections import shared_read_connection
 from backend.read_models.cards import platform_display_label
-from backend.read_models.opportunity_board import board_items
-from backend.read_models.opportunity_board_data import breakdowns, latest_verifications, verifications
+from backend.read_models.opportunity_board_data import (
+    breakdown_stages, latest_verifications, stats_breakdowns, verifications,
+)
 from backend.read_models.opportunity_board_types import (
     AcquisitionFunnel, CandidateRow, DailyCount, FollowUpRow, Funnel, PlatformCounts, RunRow, StatsData,
 )
@@ -50,7 +51,7 @@ def stats(base_dir: Path | str, window: str = "all") -> StatsData:
         time = parse_utc(stamp)
         return (start is None or time >= start) and time < end
 
-    all_breakdowns = breakdowns(base_dir)
+    all_breakdowns = stats_breakdowns(base_dir)
     selected = [row for row in all_breakdowns if within(row["created_at"])]
     records = verifications(base_dir)
     latest = latest_verifications(records)
@@ -116,7 +117,8 @@ def stats(base_dir: Path | str, window: str = "all") -> StatsData:
         "action": sum(v["conclusion"] == "to_action" and within(v["created_at"]) for v in latest.values())}
     stages: Counter[str] = Counter()
     archives: Counter[str] = Counter()
-    for item in board_items(base_dir):
+    latest_events = {event["card_id"]: event for event in events}
+    for item in breakdown_stages(all_breakdowns, latest_events, latest).values():
         if within(cast(str, item["stage_since"])):
             stages[cast(str, item["stage"])] += 1
             if item["archive_reason"] is not None:

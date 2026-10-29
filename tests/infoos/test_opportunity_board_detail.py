@@ -62,3 +62,18 @@ def test_detail_and_preview_do_not_depend_on_board_membership(tmp_path, step, fo
         with sqlite3.connect(default_database_path(tmp_path)) as conn:
             conn.execute("update cards set content_hash='hash' where card_id='card-2'")
         assert client.get("/api/card-preview/card-2").json()["opportunity"] is None
+
+
+@pytest.mark.parametrize("questions", [[], ["交付是什么？"], ["投入多少？", "如何获客？", "收益能否核实？"]])
+def test_list_question_counts_and_complete_detail_arrays(tmp_path, questions):
+    prepared(tmp_path)
+    evidence = ["原文提供了产品价格。", "作者说明了交付流程。"]
+    save(tmp_path, [item(next_step="observe", evidence=evidence, verify_questions=questions)])
+    with TestClient(create_app(tmp_path)) as client:
+        board = client.get("/api/opportunities/board?include_observe=true").json()
+        page = client.get("/api/opportunities/all").json()
+        detail = client.get("/api/opportunities/card-1").json()
+    assert board["columns"]["inbox"]["items"][0]["question_count"] == len(questions)
+    assert page["items"][0]["question_count"] == len(questions)
+    assert detail["evidence"] == evidence
+    assert detail["verify_questions"] == questions

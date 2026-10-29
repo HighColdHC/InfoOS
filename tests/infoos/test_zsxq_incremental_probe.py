@@ -126,14 +126,19 @@ def test_incremental_budget_tracks_runtime_page_limit(tmp_path, monkeypatch):
 def test_tag_candidate_python_and_sql_match_stored_raw_format(tmp_path, tags, platform, kind, expected):
     payload = {"raw_metadata": {"tags": tags}}
     assert is_opportunity_candidate(payload, platform, kind) is expected
-    with sqlite3.connect(":memory:") as conn:
-        found = conn.execute(f"""with r(raw_payload) as (values (?)),
-            s(platform, source_type) as (values (?, ?)) select {WIND_VANE_CANDIDATE} from r cross join s""",
-                             (json.dumps(payload), platform, kind)).fetchone()[0]
+    item = RawItem(raw_item_id="candidate", connector_id="zsxq:topics", source_platform=platform,
+                   source_type="article", source_url="https://wx.zsxq.com/topic/candidate", captured_at=NOW,
+                   raw_metadata=payload["raw_metadata"])
+    repository = RawItemRepository(tmp_path)
+    repository.upsert_raw_items([item])
+    with repository.connect_existing() as conn:
+        found = conn.execute(f"""with s(platform, source_type) as (values (?, ?))
+            select {WIND_VANE_CANDIDATE} from raw_item_candidate_flags f cross join s
+            where f.connector_id=? and f.raw_item_id=?""",
+                             (platform, kind, item.connector_id, item.raw_item_id)).fetchone()[0]
     assert bool(found) is expected
-    item = raw(tmp_path, "topics", NOW)
-    stored = RawItemRepository(tmp_path).get_for_connector(item.connector_id, item.raw_item_id)
-    assert stored["raw_payload"]["raw_metadata"]["tags"] == ["风向标"]
+    stored = repository.get_for_connector(item.connector_id, item.raw_item_id)
+    assert stored["raw_payload"]["raw_metadata"]["tags"] == tags
 
 
 @pytest.mark.parametrize("topics_enabled,topics_group,topics_tab,opportunity_tab", [

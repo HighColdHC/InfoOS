@@ -2,14 +2,26 @@
 from typing import NotRequired, TypedDict
 
 from backend.domain.intelligence.opportunity import CandidateKind
-from backend.domain.intelligence.opportunity_follow_up import Stage, VerificationFact
+from backend.domain.intelligence.opportunity_follow_up import FollowUpFact, Stage, VerificationFact
 
 
-class BreakdownFields(TypedDict):
-    candidate_kind: CandidateKind | None
-    breakdown_id: str
+class StageBreakdownRow(TypedDict):
     card_id: str
     created_at: str
+    next_step: str
+
+
+class StatsBreakdownRow(StageBreakdownRow):
+    monetization_model: str
+    risk_flags: list[str]
+    replicability: int
+    credibility: int
+    platform: str
+
+
+class BreakdownFields(StageBreakdownRow):
+    candidate_kind: CandidateKind | None
+    breakdown_id: str
     writeback_at: str | None
     evaluator: str
     lens_version: str
@@ -20,7 +32,6 @@ class BreakdownFields(TypedDict):
     target_customer: str | None
     replicability: int
     credibility: int
-    next_step: str
     breakdown_note: str
     title: str
     author: str | None
@@ -28,17 +39,24 @@ class BreakdownFields(TypedDict):
     source_name: str | None
     source_url: str
     published_at: str | None
-    author_url: str | None
-    is_digest: NotRequired[bool | None]
 
 
 class RawBreakdownRow(BreakdownFields):
+    author_url: str | None
+    is_digest: NotRequired[bool | None]
     risk_flags: str
     evidence: str
     verify_questions: str
 
 
+class BoardRow(BreakdownFields):
+    risk_flags: list[str]
+    question_count: int
+
+
 class BreakdownRow(BreakdownFields):
+    author_url: str | None
+    is_digest: NotRequired[bool | None]
     risk_flags: list[str]
     evidence: list[str]
     verify_questions: list[str]
@@ -154,10 +172,8 @@ class RunRow(TypedDict):
     platform: str
 
 
-class FollowUpRow(TypedDict):
+class FollowUpRow(FollowUpFact):
     card_id: str
-    state: str
-    created_at: str
 
 
 class CandidateRow(TypedDict):

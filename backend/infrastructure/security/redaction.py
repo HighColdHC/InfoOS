@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 from pathlib import Path
 import re
 from typing import Any
@@ -29,41 +30,50 @@ DIAGNOSTIC_SUMMARY_MAX_CHARS = 800
 _DIAGNOSTIC_TAIL_LINES = 12
 
 
+@lru_cache(maxsize=4096)
 def is_secret_key(key: str) -> bool:
     normalized = key.lower()
     return any(part in normalized for part in SECRET_KEY_PARTS)
 
 
 def redact_secrets(value: Any) -> Any:
+    return _redact_secrets(value, _sensitive_roots())
+
+
+def _redact_secrets(value: Any, roots: tuple[tuple[str, str], ...]) -> Any:
     if isinstance(value, dict):
         redacted: dict[str, Any] = {}
         for key, child in value.items():
             if is_secret_key(str(key)):
                 if isinstance(child, (dict, list)):
-                    redacted[key] = redact_secrets(child)
+                    redacted[key] = _redact_secrets(child, roots)
                 else:
                     redacted[key] = REDACTED
             else:
-                redacted[key] = redact_secrets(child)
+                redacted[key] = _redact_secrets(child, roots)
         return redacted
     if isinstance(value, list):
-        return [redact_secrets(child) for child in value]
+        return [_redact_secrets(child, roots) for child in value]
     if isinstance(value, tuple):
-        return tuple(redact_secrets(child) for child in value)
+        return tuple(_redact_secrets(child, roots) for child in value)
     if isinstance(value, str):
-        return redact_text(value)
+        return _redact_text(value, roots)
     return value
 
 
 def redact_text(value: str) -> str:
     """Redact credentials and local roots embedded in otherwise safe text."""
 
+    return _redact_text(value, _sensitive_roots())
+
+
+def _redact_text(value: str, roots: tuple[tuple[str, str], ...]) -> str:
     redacted = _HEADER_PATTERN.sub(REDACTED, value)
     redacted = _BEARER_PATTERN.sub(REDACTED, redacted)
     redacted = _INFOOS_TOKEN_PATTERN.sub(REDACTED, redacted)
     redacted = _API_KEY_PATTERN.sub(REDACTED, redacted)
     redacted = _QUERY_SECRET_PATTERN.sub(lambda match: f"{match.group(1)}{REDACTED}", redacted)
-    for root, label in _sensitive_roots():
+    for root, label in roots:
         if root:
             redacted = redacted.replace(root, label)
     return redacted
@@ -100,12 +110,22 @@ def _coerce_output(value: str | bytes | None) -> str:
 
 
 def _sensitive_roots() -> tuple[tuple[str, str], ...]:
+    return _cached_sensitive_roots(
+        os.environ.get("INFOOS_STATE_HOME"),
+        os.environ.get("INFOOS_DATA_HOME"),
+        os.environ.get("HOME"),
+    )
+
+
+@lru_cache(maxsize=128)
+def _cached_sensitive_roots(
+    state_home: str | None, data_home: str | None, home_env: str | None
+) -> tuple[tuple[str, str], ...]:
     values: list[tuple[str, str]] = []
-    for env_name, label in (
-        ("INFOOS_STATE_HOME", "<INFOOS_STATE_HOME>"),
-        ("INFOOS_DATA_HOME", "<INFOOS_DATA_HOME>"),
+    for raw, label in (
+        (state_home, "<INFOOS_STATE_HOME>"),
+        (data_home, "<INFOOS_DATA_HOME>"),
     ):
-        raw = os.environ.get(env_name)
         if raw:
             values.append((str(Path(raw).expanduser()), label))
     home = str(Path.home())

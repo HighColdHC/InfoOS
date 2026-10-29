@@ -64,9 +64,14 @@ def broken_body_title(title: Any, content: Any) -> bool:
     )
 
 
+def title_needs_body(source_platform: str | None) -> bool:
+    """Only X body-prefix titles can need the body to repair the display title."""
+    return str(source_platform or "").strip().lower() == "x"
+
+
 def display_title(source_platform: str | None, stored_title: str, content: str | None, *, max_length: int = 80) -> str:
     """Repair broken X body titles for display, preserving the stored input."""
-    if str(source_platform or "").strip().lower() == "x" and broken_body_title(stored_title, content):
+    if title_needs_body(source_platform) and broken_body_title(stored_title, content):
         return body_title(content, max_length=max_length)
     return stored_title
 

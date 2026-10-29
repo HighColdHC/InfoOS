@@ -5,7 +5,6 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from backend.infrastructure.security.redaction import redact_secrets
 from backend.read_models.operations_logs import (
     read_operations_log_detail,
     read_operations_log_page,
@@ -59,7 +58,7 @@ def api_operations_logs(
         limit=parsed_limit,
         offset=parsed_offset,
     )
-    return JSONResponse(redact_secrets(payload))
+    return JSONResponse(payload)
 
 
 @router.get("/api/logs/{log_id}")
@@ -67,7 +66,7 @@ def api_operations_log_detail(request: Request, log_id: str) -> JSONResponse:
     detail = read_operations_log_detail(_base_dir(request), log_id)
     if detail is None:
         return _error("log_not_found", "Log record not found", 404)
-    return JSONResponse(redact_secrets(detail))
+    return JSONResponse(detail)
 
 
 def _bounded_int(value: str, *, lower: int, upper: int) -> int | None:
@@ -89,4 +88,4 @@ def _valid_timestamp(value: str) -> bool:
 
 
 def _error(code: str, message: str, status_code: int) -> JSONResponse:
-    return JSONResponse(redact_secrets({"code": code, "message": message}), status_code=status_code)
+    return JSONResponse({"code": code, "message": message}, status_code=status_code)

@@ -142,6 +142,7 @@ class OpportunityBreakdownRepository(InfoOSRepository):
                 "from opportunity_breakdowns b join cards c "
                 "on c.card_id=b.card_id "
                 "left join raw_items r on r.connector_id=c.raw_connector_id and r.raw_item_id=c.raw_item_id "
+                "left join raw_item_candidate_flags f on f.connector_id=r.connector_id and f.raw_item_id=r.raw_item_id "
                 "left join sources s on s.source_id=r.source_id where " + " and ".join(clauses) +
                 " order by b.created_at desc, b.breakdown_id desc limit ?", (*params, limit + 1)).fetchall()
             profile = InterestProfileRepository(self.base_dir).get(connection=conn)

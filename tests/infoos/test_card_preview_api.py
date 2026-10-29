@@ -750,11 +750,13 @@ def test_card_preview_asset_serves_repository_owned_file_by_asset_id(tmp_path) -
     assert response.content == b"jpeg-fixture"
     assert response.headers["content-type"] == "image/jpeg"
     assert response.headers["accept-ranges"] == "bytes"
+    assert response.headers["cache-control"] == "private, max-age=604800"
     assert unsafe_mime.status_code == 200
     assert unsafe_mime.headers["content-type"] == "application/octet-stream"
     assert ranged.status_code == 206
     assert ranged.content == b"fixtu"
     assert ranged.headers["content-range"] == "bytes 5-9/12"
+    assert ranged.headers["cache-control"] == "private, max-age=604800"
 
 
 def test_card_preview_asset_rejects_unknown_missing_and_out_of_root_files(tmp_path) -> None:
@@ -805,6 +807,7 @@ def test_card_preview_asset_rejects_unknown_missing_and_out_of_root_files(tmp_pa
     cleaned = client.get("/api/card-preview/assets/asset-cleaned")
 
     assert unknown.status_code == 404
+    assert "cache-control" not in unknown.headers
     assert unknown.json() == {"code": "asset_not_found", "message": "Asset not found"}
     assert outside.status_code == 403
     assert outside.json() == {

@@ -18,7 +18,7 @@ from backend.read_models.plugin_cards import (
 )
 
 from tests.infoos.read_models.test_plugin_card_queries import (
-    all_pages, catalog_seed, legacy_card_detail, legacy_card_page,
+    _catalog_template, all_pages, catalog_seed, legacy_card_detail, legacy_card_page,
 )
 
 

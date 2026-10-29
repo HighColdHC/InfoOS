@@ -60,6 +60,10 @@ def adapter_batch(statuses):
     script = """
       import { screenFeedItem } from './deploy/docker/opencli-adapters/douyin/feed-prefilter.js';
       import { collectFeed } from './deploy/docker/opencli-adapters/douyin/feed-session.js';
+      // This integration fixture checks evidence, not request pacing. Keep timers
+      // asynchronous while skipping delays between the in-memory requests.
+      const realSetTimeout = globalThis.setTimeout;
+      globalThis.setTimeout = (callback, _delay, ...args) => realSetTimeout(callback, 0, ...args);
       const {config, statuses} = JSON.parse(process.argv[1]);
       const state = position => ({position, item: {
         aweme_id: String(1234567890123456n + BigInt(position)),

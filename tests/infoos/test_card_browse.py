@@ -1,6 +1,8 @@
 """Browse filters and bounded batch projections, using local SQLite only."""
 from unittest.mock import patch
 
+import pytest
+
 from backend.infrastructure.storage import card_browse_query, card_preview_query
 from backend.infrastructure.storage.opportunity_breakdowns import OpportunityBreakdownRepository
 from backend.infrastructure.storage.repositories import CardRepository, SourceRepository
@@ -67,6 +69,31 @@ def test_relevance_sort_and_view_validation(evaluated_preview):
                    {"evaluation": "evaluated", "recommended": "1"}):
         response = client.get(path, params=params)
         assert response.status_code == 422 and response.json()["code"] == "invalid_evaluation"
+
+
+@pytest.mark.parametrize("view", [{"evaluation": "passed"}, {"recommended": "1"}])
+def test_relevance_page_uses_latest_scores_then_publication_and_id(evaluated_preview, tmp_path, view):
+    from tests.infoos.test_card_preview_api import _store_evaluation
+
+    for card_id in ("tie-a", "tie-z"):
+        _store_card(tmp_path, card_id=card_id, platform="x", title="关注产品 " + card_id, author="作者")
+        _store_evaluation(tmp_path, card_id, quality=90, relevance=90, passed=True)
+    # The older evaluation still passes and has a higher score, but must never
+    # supply the sort key or cause a duplicate row on any page.
+    _store_evaluation(tmp_path, "recommended-high", quality=80, relevance=10, passed=True,
+                      evaluation_id="a-high-latest", created_at="2026-07-18T00:00:00Z")
+    params = {**view, "sort": "relevance_desc", "limit": 2}
+    expected = ["recommended-quality", "recommended-newer", "tie-z", "tie-a",
+                "recommended-low", "recommended-high", "recommended-null"]
+    actual = []
+    for offset in range(0, len(expected), 2):
+        response = evaluated_preview.get("/api/card-preview", params={**params, "offset": offset})
+        assert response.json()["total"] == len(expected)
+        actual.extend(ids(response))
+    assert actual == expected
+    filtered = {**params, "source_id": "source-x", "platform": "x", "query": "关注 产品",
+                "published_since": "2026-07-17T00:00:00Z", "published_until": "2026-07-18T00:00:00Z"}
+    assert ids(evaluated_preview.get("/api/card-preview", params=filtered)) == ["recommended-newer"]
 
 
 def test_facets_counts_exclusions_bounded_order_and_index(tmp_path, monkeypatch):

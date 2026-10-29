@@ -54,6 +54,16 @@ def _assume_existing_infoos_chrome_is_headless(monkeypatch):
     )
 
 
+@pytest.fixture(autouse=True)
+def _skip_page_settle_delay(monkeypatch):
+    # These tests exercise session preparation with mocked browser commands;
+    # elapsed page-settle time is not part of their assertions.
+    monkeypatch.setattr(
+        "backend.application.usecases.browser_session._wait_for_page_settle",
+        lambda: None,
+    )
+
+
 def _patch_profile_running(monkeypatch, replacement):
     for module in ("browser_session", "browser_session_profile", "browser_session_x"):
         monkeypatch.setattr(

@@ -54,8 +54,17 @@ export default function ManagementApp({ refreshIntervalMs }: { refreshIntervalMs
   useEffect(() => {
     void refreshStatus(true);
     if (refreshIntervalMs <= 0) return undefined;
-    const timer = window.setInterval(() => void refreshStatus(), refreshIntervalMs);
-    return () => window.clearInterval(timer);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "hidden") void refreshStatus();
+    }, refreshIntervalMs);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void refreshStatus();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [refreshIntervalMs, refreshStatus]);
 
   useAsyncEffect(async (signal) => {

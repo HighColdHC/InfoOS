@@ -525,6 +525,8 @@ python3 deploy/docker/deploy-existing.py --environment test \
 
 边缘全站代理须支持所有管理操作的方法，`client_max_body_size 64m`；控制台 `/browser-console/websockify` 透传 WebSocket Upgrade，读取超时 31m。仅剔除 Authelia 自身的会话 cookie，其余 Cookie 和上游 `Set-Cookie` 透传，以保留控制台 grant 与局域网会话。Authelia 全站规则使用 `two_factor`（所有方法），`default_policy` 保持 deny。边缘改动前备份，执行 `nginx -t` 与 `validate-config` 后再应用；仓库改动不代表边缘已更新。
 
+容器 nginx 为带 hash 的前端资源设置一年缓存，为卡片附件设置七天私有缓存；其余响应沿用上游缓存策略或 `no-cache`。nginx 层无 gzip 模块；压缩由应用层中间件完成，仅覆盖 JSON、JS、CSS、HTML、纯文本和 SVG，不含 `/mcp`、Range 请求与二进制附件。
+
 既有阅读面白名单保留（除明确列出的唯一 PUT 外，只放行 GET/HEAD），全站管理代理上线后作为冗余路径：
 
 - `/r/`：当前页面 `/r/card/:id`、`/r/brief/:date`、`/r/browse`、`/r/knowledge`、`/r/knowledge/:id`、`/r/opportunities`、`/r/opportunities/stats`。

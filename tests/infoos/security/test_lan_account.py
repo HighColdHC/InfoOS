@@ -20,6 +20,18 @@ OLD = "initial-test-only-password"
 NEW = "replacement-test-only-secret"
 
 
+@pytest.fixture(autouse=True)
+def _fast_bcrypt_except_cost_check(request, monkeypatch):
+    # Keep the production cost in the test that asserts it; other tests still
+    # exercise real bcrypt verification and persistence at a lower test cost.
+    if request.node.name == "test_bcrypt_apr1_and_atomic_permissions":
+        return
+    import bcrypt
+
+    gensalt = bcrypt.gensalt
+    monkeypatch.setattr(bcrypt, "gensalt", lambda **kwargs: gensalt(rounds=4))
+
+
 @pytest.fixture
 def store(tmp_path, monkeypatch):
     path = tmp_path / "htpasswd"

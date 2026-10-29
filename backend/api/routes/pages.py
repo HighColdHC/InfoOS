@@ -32,7 +32,7 @@ def _frontend_index(request: Request) -> Path:
 def _serve_frontend_index(request: Request) -> Response:
     frontend_index = _frontend_index(request)
     if frontend_index.exists():
-        return FileResponse(frontend_index)
+        return FileResponse(frontend_index, headers={"Cache-Control": "no-cache"})
     return JSONResponse({"error": "frontend_dist_missing"}, status_code=404)
 
 

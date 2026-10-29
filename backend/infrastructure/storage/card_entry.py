@@ -36,6 +36,18 @@ class DisplayBodyRow(TypedDict):
     raw_payload: object
 
 
+class CardDisplayFields(TypedDict):
+    title: str
+    is_digest: bool | None
+
+
+def card_display_fields(source_platform: str | None, title: str, content: str,
+                        payload: object) -> CardDisplayFields:
+    """Project display metadata from an already loaded body and decoded payload."""
+    return {"title": display_title(source_platform, title, content),
+            "is_digest": card_is_digest({"source_platform": source_platform, "raw_payload": payload})}
+
+
 ENTRY_KEY = "r.first_seen_at"
 CARD_FIELDS = "c.card_id, c.version, c.title, c.source_platform, c.source_author, c.published_at, c.source_url"
 # Start from the time-range index, then point-join active cards by raw identity.
@@ -98,11 +110,11 @@ def project_display_titles(base_dir: Path | str, rows: Sequence[Mapping[str, Any
         stored = bodies.get(row['card_id'])
         if stored is None:
             content = ''
-            digest_card = {'raw_payload': loads(None, {})}
+            payload = {}
         else:
             content = stored['content']
-            digest_card = {**stored, 'raw_payload': loads(stored['raw_payload'], {})}
-        row['is_digest'] = card_is_digest(digest_card)
-        row['title'] = display_title(row.get('source_platform', row.get('platform')), row['title'], content)
+            payload = loads(stored['raw_payload'], {})
+        fields = card_display_fields(row.get('source_platform', row.get('platform')), row['title'], content, payload)
+        row.update(fields)
         if excerpt:
             row['excerpt'] = content[:300]

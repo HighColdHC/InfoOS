@@ -1,3 +1,4 @@
+import { Play } from "lucide-react";
 import type { CardPreviewListItem } from "../../lib/types/cardPreview";
 import { ATTRIBUTION, enumLabel } from "../../lib/intelligenceLabels";
 import { platformLabel } from "../../lib/platforms";
@@ -9,13 +10,15 @@ import { cardReaderLinkProps } from "./cardReaderLink";
 const NEXT_STEP = { verify: "待核实", observe: "继续观察", skip: "跳过" };
 
 export function BrowseCard({ item, onOpen }: { item: CardPreviewListItem; onOpen: (cardId: string) => void }) {
+  const coverSrc = item.cover_thumbnail_url ?? (item.cover_kind !== "video" ? item.cover_asset_url : null);
   const evaluation = item.evaluation;
   const below = evaluation?.passed_quality === false;
   const link = cardReaderLinkProps(item.card_id, onOpen);
-  return <article className={`browse-reader__card spotlight${below ? " browse-reader__card--below" : ""}${item.cover_asset_url ? " browse-reader__card--media" : ""}`}>
-    {item.cover_asset_url && item.cover_kind !== "video" ? (
+  return <article className={`browse-reader__card spotlight${below ? " browse-reader__card--below" : ""}${coverSrc ? " browse-reader__card--media" : ""}`}>
+    {coverSrc ? (
       <a className="browse-reader__cover" {...link} tabIndex={-1} aria-hidden="true">
-        <img src={item.cover_asset_url} alt="" loading="lazy" />
+        <img src={coverSrc} alt="" loading="lazy" decoding="async" />
+        {item.cover_kind === "video" ? <Play className="browse-reader__play" size={18} fill="currentColor" aria-label="视频" /> : null}
       </a>
     ) : null}
     <div className="browse-reader__card-body">

@@ -22,7 +22,9 @@ import time
 from contextlib import nullcontext
 from pathlib import Path
 
+from backend.application.usecases.browser_session_profile import _with_detail
 from backend.infrastructure.opencli.runtime import opencli_browser_lock, resolve_opencli_executable
+from backend.infrastructure.security.redaction import redact_text
 from backend.application.setup.visibility import read_headless_during_fetch
 from backend.application.usecases.opencli_status import (
     _infoos_chrome_profile_pids,
@@ -188,8 +190,8 @@ def _launch_browser(
     try:
         subprocess.run(cmd, capture_output=True, text=True, timeout=10, check=False)
         result["browser_opened"] = True
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        result["issues"].append("无法启动专用浏览器会话")
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        result["issues"].append(_with_detail("无法启动专用浏览器会话", redact_text(str(exc))))
         result["browser_opened"] = False
 
 

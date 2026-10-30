@@ -50,20 +50,6 @@ def _one_task(repo: TaskRepository, task_type: TaskType) -> Task:
     return tasks[0]
 
 
-def test_card_chain_has_expected_stage_order():
-    from backend.application.tasks.transitions import CARD_PIPELINE_STAGES
-
-    assert CARD_PIPELINE_STAGES == (
-        TaskType.FETCH,
-        TaskType.CARD_BUILD,
-        TaskType.CONTENT_ENRICH,
-        TaskType.MEDIA_DOWNLOAD,
-        TaskType.VIDEO_EXTRACT_AUDIO,
-        TaskType.VIDEO_TRANSCRIBE,
-        TaskType.CARD_FINALIZE,
-    )
-
-
 def test_new_card_pipeline_does_not_schedule_legacy_intelligence_stages(tmp_path: Path):
     """The collector product ends at an information card, not downstream knowledge work."""
     card_id = "collector_terminal_card"

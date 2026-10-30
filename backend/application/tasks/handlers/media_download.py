@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from backend.application.enrichment.media.thumbnails import ensure_card_thumbnails
 from backend.application.tasks.types import Task, TaskStatus
 from backend.domain.media_outcomes import is_resolved_x_no_media_outcome
 from backend.infrastructure.security.redaction import summarize_subprocess_output
@@ -71,6 +72,7 @@ def handle_media_download(task: Task, base_dir: Path) -> dict[str, Any]:
     before = {asset["asset_id"] for asset in asset_repo.list_for_card(task.target_id)}
     before_block_ids = {block["block_id"] for block in initial_blocks}
     download_card_media(task.target_id, base_dir)
+    ensure_card_thumbnails(base_dir, task.target_id)
     assets = asset_repo.list_for_card(task.target_id)
     blocks = block_repo.list_for_card(task.target_id)
     blocks = _normalize_media_gap_diagnostics(block_repo, blocks)

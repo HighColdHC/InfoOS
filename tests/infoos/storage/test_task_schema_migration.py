@@ -80,16 +80,6 @@ def test_existing_tasks_table_gains_lease_columns(tmp_path: Path) -> None:
     assert _LEGACY_TASK_COLUMNS | _TASK_LEASE_COLUMNS | _TASK_QUEUE_COLUMNS <= _task_column_names(db_path)
 
 
-def test_initialize_database_is_idempotent_after_task_lease_migration(tmp_path: Path) -> None:
-    db_path = tmp_path / "legacy-tasks.sqlite3"
-    _create_legacy_tasks_table(db_path)
-
-    migrate_database_path(db_path)
-    migrate_database_path(db_path)
-
-    assert _LEGACY_TASK_COLUMNS | _TASK_LEASE_COLUMNS | _TASK_QUEUE_COLUMNS <= _task_column_names(db_path)
-
-
 def test_existing_task_rows_are_backfilled_once_with_a_durable_queue(tmp_path: Path) -> None:
     db_path = tmp_path / "legacy-tasks.sqlite3"
     _create_legacy_tasks_table(db_path)

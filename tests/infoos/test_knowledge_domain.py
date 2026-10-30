@@ -3,7 +3,7 @@ from copy import deepcopy
 
 import pytest
 
-from backend.domain.intelligence.knowledge import deterministic_channel, freshness, validate_knowledge
+from backend.domain.intelligence.knowledge import QuotesValidationError, deterministic_channel, freshness, validate_knowledge
 from backend.domain.intelligence.knowledge_kinds import KINDS
 from backend.domain.intelligence.triage import validate_triage
 from tests.infoos.test_agent_evaluations import item
@@ -131,3 +131,22 @@ def test_triage_exclusion_priority():
     assert validate_triage(item(quality=60, attribution_kind="paused", exclusion="paused"), is_fresh=False)["exclusion"] == "paused"
     with pytest.raises(ValueError, match="paused_exclusion_required"):
         validate_triage(item(quality=60, attribution_kind="paused", exclusion="low_quality"), is_fresh=False)
+
+
+@pytest.mark.parametrize("quotes,reason,detail", [
+    (68, "invalid_quotes", "quotes: expected a string array; got int"),
+    (TEXT, "invalid_quotes", "quotes: expected a string array; got str"),
+    ({"text": TEXT}, "invalid_quotes", "quotes: expected a string array; got dict"),
+    ([], "invalid_quotes", "quotes: expected 1–5 entries; got 0"),
+    ([TEXT] * 6, "invalid_quotes", "quotes: expected 1–5 entries; got 6"),
+    ([TEXT, {"text": TEXT}], "invalid_quotes", "quotes[1]: expected a non-empty string"),
+    ([TEXT, " "], "invalid_quotes", "quotes[1]: expected a non-empty string"),
+    ([TEXT, "长" * 201], "invalid_quotes", "quotes[1]: maximum 200 characters; got 201"),
+    ([TEXT, "伪造"], "quote_not_in_card",
+     "quotes[1]: not found in the source card or content blocks; copy a verbatim substring"),
+])
+def test_quote_validation_details(quotes, reason, detail):
+    with pytest.raises(QuotesValidationError) as exc:
+        validate(knowledge("method", quotes=quotes))
+    assert str(exc.value) == reason
+    assert exc.value.detail == detail

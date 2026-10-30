@@ -339,6 +339,28 @@ def test_connected_opencli_profile_names_parses_opencli_180_real_format(monkeypa
     )
 
 
+def test_profile_command_failure_preserves_redacted_detail(monkeypatch):
+    monkeypatch.setattr(
+        browser_session_profile.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=1,
+            stdout="",
+            stderr=f"Authorization: Bearer abc\nCannot open {Path.home()}/opencli/profile.json",
+        ),
+    )
+    result = {"profile": {}}
+
+    assert browser_session_profile._run_profile_command(
+        ["opencli", "profile", "use", "demo0001"], result
+    ) is False
+
+    error = result["profile"]["binding_error"]
+    assert error.startswith("专用 OpenCLI 配置操作失败：")
+    assert "<USER_HOME>/opencli/profile.json" in error
+    assert "abc" not in error
+
+
 def test_connected_opencli_profile_names_still_parses_old_format(monkeypatch):
     """Backward compat: old format `name — status` must still parse."""
     from backend.application.usecases import browser_session

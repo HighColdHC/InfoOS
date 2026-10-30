@@ -17,7 +17,7 @@ from .v0001_baseline import SchemaDriftError as SchemaDriftError
 from .v0002_legacy_backfills import LegacyMigrationMarkerError as LegacyMigrationMarkerError
 
 
-LATEST_VERSION = 24
+LATEST_VERSION = 25
 DEFAULT_BATCH_SIZE = v0002_legacy_backfills.DEFAULT_BATCH_SIZE
 ProgressCallback = Callable[[dict[str, Any]], None]
 
@@ -25,7 +25,7 @@ ProgressCallback = Callable[[dict[str, Any]], None]
 def _validate_latest_schema(
     conn: sqlite3.Connection, *, include_v15: bool = True, include_v16: bool = True,
     include_v17: bool = True, include_v19: bool = False, include_v21: bool = False,
-    include_v23: bool = False, include_v24: bool = False,
+    include_v23: bool = False, include_v24: bool = False, include_v25: bool = False,
 ) -> list[str]:
     statements = [
         *v0001_baseline._statements(),
@@ -55,6 +55,8 @@ def _validate_latest_schema(
         statements.extend(_sql_statements("v0023_read_path_indexes.sql"))
     if include_v24:
         statements.extend(v0024_candidate_flags.SCHEMA_STATEMENTS)
+    if include_v25:
+        statements.extend(_sql_statements("v0025_card_asset_thumbnails.sql"))
     warnings = v0001_baseline.validate_schema(conn, statements=statements)
     if include_v15:
         v0015_card_read_keys.validate(conn)
@@ -212,7 +214,7 @@ def migrate_database(
                 if current > LATEST_VERSION:
                     raise DatabaseVersionTooNew(path, current)
                 if current == LATEST_VERSION:
-                    warnings = _validate_latest_schema(conn, include_v19=True, include_v21=True, include_v23=True, include_v24=True)
+                    warnings = _validate_latest_schema(conn, include_v19=True, include_v21=True, include_v23=True, include_v24=True, include_v25=True)
                     schema_validated = True
                     if warnings:
                         event = {
@@ -408,6 +410,13 @@ def migrate_database(
                     _validate_latest_schema(conn, include_v19=True, include_v21=True, include_v23=True, include_v24=True)
                     conn.execute("pragma user_version = 24")
                     event = {"migration": 24, "phase": "candidate_flags", "rows": 0, "complete": True}
+                elif current == 24:
+                    _validate_latest_schema(conn, include_v19=True, include_v21=True, include_v23=True, include_v24=True)
+                    for statement in _sql_statements("v0025_card_asset_thumbnails.sql"):
+                        conn.execute(statement)
+                    _validate_latest_schema(conn, include_v19=True, include_v21=True, include_v23=True, include_v24=True, include_v25=True)
+                    conn.execute("pragma user_version = 25")
+                    event = {"migration": 25, "phase": "card_asset_thumbnails", "rows": 0, "complete": True}
                 else:
                     raise DatabaseMigrationError(f"unsupported database version {current} at {path}")
                 if progress_callback is not None:

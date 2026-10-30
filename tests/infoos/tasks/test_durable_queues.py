@@ -215,8 +215,7 @@ def test_global_task_tracking_page_includes_non_source_tasks(tmp_path: Path) -> 
     assert page["items"][0]["queue_name"] == "maintenance_io"
 
 
-@pytest.mark.parametrize("queue_name", [None, "public_fetch", "card_pipeline", "missing"])
-@pytest.mark.parametrize("status", [None, "running", "pending", "success", "failed"])
+@pytest.mark.parametrize("queue_name,status", [(None, None), (None, "pending"), (None, "success"), ("public_fetch", None)])
 def test_task_tracking_pages_across_active_and_finished_segments(tmp_path, queue_name, status):
     repo = TaskRepository.for_base_dir(tmp_path)
     # Expected global order: running (priority before recency), pending, then

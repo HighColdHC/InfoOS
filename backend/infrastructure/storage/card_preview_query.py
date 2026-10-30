@@ -195,9 +195,11 @@ def read_preview_page_content(base_dir: Path, card_ids: list[str], source_ids: l
                 order by card_id, position, created_at, block_id""", card_ids,
         )]
         assets = [cast(PreviewAssetRow, dict(row)) for row in conn.execute(
-            f"""select asset_id, card_id, asset_kind, mime_type, status, cleanup_state, local_path, created_at
-                from card_assets where card_id in ({placeholders})
-                order by card_id, created_at, asset_id""", card_ids,
+            f"""select a.asset_id, a.card_id, a.asset_kind, a.mime_type, a.status, a.cleanup_state, a.local_path, a.created_at,
+                       a.content_hash, t.status as thumbnail_status, t.source_content_hash as thumbnail_hash
+                from card_assets a left join card_asset_thumbnails t on t.asset_id = a.asset_id
+                where a.card_id in ({placeholders})
+                order by a.card_id, a.created_at, a.asset_id""", card_ids,
         )]
         sources = []
         if source_ids:

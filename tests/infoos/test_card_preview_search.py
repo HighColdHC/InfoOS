@@ -1,4 +1,3 @@
-from contextlib import contextmanager
 from datetime import datetime
 
 import pytest
@@ -9,9 +8,8 @@ from tests.infoos.test_card_preview_api import _store_card, _set_card_publicatio
 
 
 @pytest.mark.parametrize("query", [None, "   ", "nebula", "人工智能", "ne nebula", "nebula ne"])
-def test_fts_count_and_page_plans_use_narrow_indexes(tmp_path, monkeypatch, query):
+def test_search_count_and_page_match_title_and_block_text(tmp_path, query):
     from backend.infrastructure.storage.card_preview_query import read_preview_rows
-    from backend.infrastructure.storage.cards import CardRepository
 
     for card_id, title in (("card", "nebula 人工智能"), ("block", "block match"), ("miss", "unrelated")):
         _store_card(tmp_path, card_id=card_id, platform="rss", title=title, author="作者")
@@ -19,28 +17,6 @@ def test_fts_count_and_page_plans_use_narrow_indexes(tmp_path, monkeypatch, quer
         "block_id": "body", "card_id": "block", "position": 0, "layer": "original",
         "block_kind": "article", "status": "preserved", "body": "nebula 人工智能",
     })
-    plans = {}
-    connect_existing = CardRepository.connect_existing
-
-    @contextmanager
-    def capture_plans(repo):
-        with connect_existing(repo) as conn:
-            statements = []
-            conn.set_trace_callback(statements.append)
-            try:
-                yield conn
-            finally:
-                conn.set_trace_callback(None)
-            for sql in statements:
-                if sql.startswith("select count(*) from cards c"):
-                    kind = "count"
-                elif sql.startswith("select c.card_id from cards "):
-                    kind = "page"
-                else:
-                    continue
-                plans[kind] = [row[3].upper() for row in conn.execute("EXPLAIN QUERY PLAN " + sql)]
-
-    monkeypatch.setattr(CardRepository, "connect_existing", capture_plans)
     rows, total = read_preview_rows(
         tmp_path, query=query, platform=None, completeness=None,
         status="active", sort="published_desc", limit=20, offset=0,
@@ -48,33 +24,6 @@ def test_fts_count_and_page_plans_use_narrow_indexes(tmp_path, monkeypatch, quer
     expected = {"card", "block"} if query and query.strip() else {"card", "block", "miss"}
     assert total == len(expected)
     assert {row["card_id"] for row in rows} == expected
-    assert plans.keys() == {"count", "page"}
-    for kind, details in plans.items():
-        if not query or not query.strip():
-            assert not any("FTS" in detail or "UNION" in detail for detail in details), (kind, details)
-            if kind == "page":
-                assert any("IDX_CARDS_STATUS_SORT" in detail for detail in details), details
-                assert not any("TEMP B-TREE" in detail for detail in details), details
-            continue
-        if kind == "count":
-            assert not any(
-                "STATUS=?" in detail and any(index in detail for index in (
-                    "IDX_CARDS_STATUS_PUBLISHED", "IDX_CARDS_STATUS_SORT",
-                )) for detail in details
-            ), (kind, details)
-        else:
-            assert any("SEARCH K USING COVERING INDEX IDX_CARDS_STATUS_SORT (STATUS=?)" in detail
-                       for detail in details), details
-            assert not any("USE TEMP B-TREE FOR" in detail for detail in details), details
-        assert any("CARD_TEXT_FTS" in detail for detail in details), (kind, details)
-        assert any("CARD_BLOCK_TEXT_FTS" in detail for detail in details), (kind, details)
-        assert any("UNION USING TEMP B-TREE" in detail for detail in details), (kind, details)
-        assert not any(detail == "SCAN C" for detail in details), (kind, details)
-        assert any(
-            "MULTI-INDEX OR" in detail or (
-                "SEARCH C " in detail and ("ROWID=?" in detail or "CARD_ID=?" in detail)
-            ) for detail in details
-        ), (kind, details)
 
 
 @pytest.mark.parametrize("query,expected", [

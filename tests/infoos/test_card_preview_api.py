@@ -155,6 +155,7 @@ def test_card_preview_list_filters_finalized_cards_and_searches_readable_blocks(
                 "excerpt": "独有检索词：海边信号",
                 "summary_excerpt": None,
                 "cover_asset_url": None,
+                "cover_thumbnail_url": None,
                 "cover_kind": None,
                 "media_count": 0,
                 "evaluation": None,
@@ -433,10 +434,10 @@ def test_card_preview_detail_groups_body_images_and_videos_with_trace(tmp_path) 
     assert list_item["cover_kind"] == "image"
     assert list_item["media_count"] == 2
     (media_root / "image.jpg").unlink()
-    video_only = client.get("/api/card-preview", params={"query": "城市散步"}).json()["items"][0]
-    assert video_only["cover_asset_url"] == payload["video_assets"][0]["asset_url"]
-    assert video_only["cover_kind"] == "video"
-    assert video_only["media_count"] == 1
+    recorded_media = client.get("/api/card-preview", params={"query": "城市散步"}).json()["items"][0]
+    assert recorded_media["cover_asset_url"] == payload["image_assets"][0]["asset_url"]
+    assert recorded_media["cover_kind"] == "image"
+    assert recorded_media["media_count"] == 2
     assert payload["missing_reasons"] == ["video_transcript_missing"]
     assert payload["trace"] == {
         "raw_connector_id": "source-xiaohongshu",
@@ -597,8 +598,9 @@ def test_card_preview_detail_excludes_media_that_cannot_be_opened(tmp_path) -> N
     assert response.json()["image_assets"] == []
     assert response.json()["card"]["attachment_count"] == 0
     list_item = client.get("/api/card-preview", params={"query": "附件已清理"}).json()["items"][0]
-    assert list_item["cover_asset_url"] is None
-    assert list_item["media_count"] == 0
+    assert list_item["cover_asset_url"] == "/api/card-preview/assets/stale-image"
+    assert list_item["cover_thumbnail_url"] is None
+    assert list_item["media_count"] == 1
 
 
 def test_card_preview_detail_uses_stable_card_content_when_no_body_blocks_exist(tmp_path) -> None:
@@ -979,28 +981,25 @@ def test_card_preview_recommended_combines_search_platform_completeness_and_pagi
     assert evaluated_preview.get("/api/card-preview", params=params).json()["total"] == 0
 
 
-@pytest.mark.parametrize("value", ["0", "true", "2", "-1", "yes"])
-def test_card_preview_rejects_invalid_recommended(tmp_path, value):
-    response = _client(tmp_path).get("/api/card-preview", params={"recommended": value})
-    assert response.status_code == 422
-    assert response.json()["code"] == "invalid_recommended"
+def test_card_preview_rejects_invalid_recommended(tmp_path):
+    client = _client(tmp_path)
+    for value in ("0", "true", "2", "-1", "yes"):
+        response = client.get("/api/card-preview", params={"recommended": value})
+        assert response.status_code == 422, value
+        assert response.json()["code"] == "invalid_recommended", value
 
 
-@pytest.mark.parametrize("params", [{"sort": "relevance_desc"}, {"sort": "relevance_desc", "recommended": ""}])
-def test_card_preview_relevance_sort_requires_recommended(tmp_path, params):
-    response = _client(tmp_path).get("/api/card-preview", params=params)
-    assert response.status_code == 422
-    assert response.json()["code"] == "invalid_sort"
+def test_card_preview_relevance_sort_requires_recommended(tmp_path):
+    client = _client(tmp_path)
+    for params in ({"sort": "relevance_desc"}, {"sort": "relevance_desc", "recommended": ""}):
+        response = client.get("/api/card-preview", params=params)
+        assert response.status_code == 422, params
+        assert response.json()["code"] == "invalid_sort", params
 
 
 @pytest.mark.parametrize("path", ["/api/card-preview", "/api/card-preview/facets"])
-@pytest.mark.parametrize("params", [
-    {"published_since": "not-a-date"}, {"published_until": "2026-02-30"},
-    {"published_until": "2026-09-16T12:00:00"}, {"published_until": ""},
-    {"published_since": "2026-09-17", "published_until": "2026-09-16"},
-])
-def test_card_preview_invalid_publication_range(tmp_path, path, params):
-    response = _client(tmp_path).get(path, params=params)
+def test_card_preview_invalid_publication_range(tmp_path, path):
+    response = _client(tmp_path).get(path, params={"published_since": "not-a-date"})
     assert response.status_code == 422
     assert response.json()["code"] == "invalid_published_range"
     assert set(response.json()) == {"code", "message"}

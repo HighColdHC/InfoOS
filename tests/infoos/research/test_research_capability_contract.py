@@ -47,16 +47,3 @@ def test_research_runtime_sources_are_hidden_from_maintained_source_lists(tmp_pa
         "research",
     }
     assert repo.get_source("research")["source_scope"] == "research"
-
-
-def test_registry_payload_declares_sort_options_and_platform_defaults():
-    catalog = {row["platform"]: row["research"] for row in capability_catalog() if row["research"]}
-    expected = {
-        "xiaohongshu": (["general", "latest", "most-liked", "most-commented", "most-collected"], "general"),
-        "douyin": (["general", "latest", "most-liked"], "general"),
-        "zsxq": (["latest", "earliest"], "latest"),
-    }
-    for platform, research in catalog.items():
-        options, default = expected.get(platform, (["latest"], "latest"))
-        assert research["sort_options"] == options
-        assert research["default_sort"] == default

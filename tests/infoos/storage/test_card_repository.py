@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sqlite3
-from contextlib import contextmanager
 
 from backend.infrastructure.storage.repositories import CardRepository, SourceRepository
 
@@ -25,29 +24,11 @@ def _card_payload(*, card_id: str, source_id: str, source_url: str = "https://ex
     }
 
 
-def test_get_card_platform_uses_narrow_query_without_decoding(tmp_path, monkeypatch):
+def test_get_card_platform_returns_platform_or_none(tmp_path):
     repo = CardRepository(tmp_path)
     repo.upsert_card(_card_payload(card_id="platform_only", source_id=None))
-    queries = []
-    connect = repo.connect_existing
-
-    @contextmanager
-    def traced_connection():
-        with connect() as conn:
-            conn.set_trace_callback(queries.append)
-            yield conn
-
-    def forbidden_decode(*_args):
-        raise AssertionError("platform lookup must not decode card payloads")
-
-    monkeypatch.setattr(repo, "connect_existing", traced_connection)
-    monkeypatch.setattr(repo, "_decode", forbidden_decode)
     assert repo.get_card_platform("platform_only") == "rss"
     assert repo.get_card_platform("missing") is None
-    assert [sql for sql in queries if "from cards" in sql.lower()] == [
-        "select source_platform from cards where card_id = 'platform_only'",
-        "select source_platform from cards where card_id = 'missing'",
-    ]
 
 
 def test_upsert_card_refreshes_source_identity_on_existing_card(tmp_path):

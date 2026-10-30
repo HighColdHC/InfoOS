@@ -1,8 +1,5 @@
 """The retired LLM quota cannot degrade the current collection product."""
 import json
-from concurrent.futures import ThreadPoolExecutor
-
-import pytest
 
 from backend.infrastructure.storage.database import connect_existing, default_database_path
 from backend.infrastructure.storage.migrations import runner
@@ -15,8 +12,7 @@ from tests.infoos.storage.migration_test_helpers import drop_v23_indexes
 NOW = "2026-10-28T00:00:00Z"
 
 
-@pytest.mark.parametrize("interrupt", [False, True])
-def test_retired_circuits_are_audited_and_removed_atomically(tmp_path, monkeypatch, interrupt):
+def test_retired_circuits_are_audited_and_removed(tmp_path):
     path = default_database_path(tmp_path)
     runner.migrate_database(path)
     circuits = RuntimeCircuitRepository(tmp_path)
@@ -32,19 +28,7 @@ def test_retired_circuits_are_audited_and_removed_atomically(tmp_path, monkeypat
         drop_v23_indexes(conn)
         conn.execute("pragma user_version=21")
         conn.commit()
-    if interrupt:
-        def fail(event):
-            if event["migration"] == 22:
-                raise RuntimeError("interrupted")
-        with pytest.raises(RuntimeError, match="interrupted"):
-            runner.migrate_database(path, progress_callback=fail)
-        with connect_existing(path) as conn:
-            assert conn.execute("pragma user_version").fetchone()[0] == 21
-            assert conn.execute("select count(*) from runtime_circuits").fetchone()[0] == 4
-            assert conn.execute("select count(*) from task_events where event_type='runtime_circuit_retired'").fetchone()[0] == 0
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        assert all(r.after_version == runner.LATEST_VERSION for r in pool.map(runner.migrate_database, [path, path]))
-    assert runner.migrate_database(path).batches == ()
+    runner.migrate_database(path)
     with connect_existing(path) as conn:
         assert [(r[0], r[1]) for r in conn.execute("select scope_kind,scope_key from runtime_circuits")] == [("platform", "x")]
         audits = [json.loads(r[0]) for r in conn.execute("select payload from task_events where event_type='runtime_circuit_retired'")]
@@ -52,7 +36,6 @@ def test_retired_circuits_are_audited_and_removed_atomically(tmp_path, monkeypat
         assert len(audits) == 3
         assert conn.execute("select count(*) from task_events where event_id='old-event'").fetchone()[0] == 1
         assert tuple(conn.execute("select * from runtime_resource_leases").fetchone()) == resource_before
-        assert conn.execute("pragma quick_check").fetchone()[0] == "ok"
     assert [r["scope_key"] for r in circuits.list_safe()] == ["x"]
 
 

@@ -14,6 +14,8 @@ from backend.infrastructure.storage.repositories import (
     CardRepository,
 )
 from backend.infrastructure.storage.x_media_cleanup import XMediaCleanupStore
+from backend.infrastructure.storage.card_asset_thumbnails import CardAssetThumbnailRepository
+from backend.infrastructure.media.thumbnails import thumbnail_relative_path
 from backend.workers.x_media_cleanup import apply_cleanup, main
 
 
@@ -166,6 +168,14 @@ def test_apply_quarantines_files_deletes_exact_rows_and_enqueues_finalize(tmp_pa
     bad_file = _seed_cleanup_case(tmp_path)
     plan = XMediaCleanupStore(tmp_path).plan(BAD_HASH)
 
+    relative = thumbnail_relative_path("asset_bad")
+    thumbnail = tmp_path / "data/assets" / relative
+    thumbnail.parent.mkdir(parents=True, exist_ok=True)
+    thumbnail.write_bytes(b"thumbnail")
+    thumbnails = CardAssetThumbnailRepository(tmp_path)
+    thumbnails.mark_ready("asset_bad", local_path=relative, width=10, height=10,
+                          size_bytes=9, source_content_hash=BAD_HASH)
+
     result = apply_cleanup(
         tmp_path,
         BAD_HASH,
@@ -174,6 +184,8 @@ def test_apply_quarantines_files_deletes_exact_rows_and_enqueues_finalize(tmp_pa
     )
 
     assert not bad_file.exists()
+    assert not thumbnail.exists()
+    assert thumbnails.get("asset_bad") is None
     quarantine = tmp_path / "data/quarantine/x_media_cleanup/20260925T123456Z"
     assert (quarantine / "assets/card_x/bad.jpg").read_bytes() == b"bad!"
     manifest = json.loads((quarantine / "manifest.json").read_text(encoding="utf-8"))

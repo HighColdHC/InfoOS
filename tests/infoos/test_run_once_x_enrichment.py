@@ -357,52 +357,42 @@ def _run_async_content_enrichment_for_first_card(tmp_path) -> dict:
     return cards[0]
 
 
-def test_async_content_enrichment_adds_x_thread_when_available(tmp_path, monkeypatch):
-    def fake_opencli_run(command, **kwargs):
-        from types import SimpleNamespace
+def _x_opencli_fake(responses):
+    from types import SimpleNamespace
 
-        # database_source_to_connector_config sends: twitter list-tweets <id> --limit N
-        # OpenCLIConnector prepends "opencli".
-        if opencli_command_startswith(command, "opencli", "twitter", "list-tweets"):
-            payload = [
-                {
-                    "id": "9000000000000000002",
-                    "url": "https://x.com/example_thread/status/9000000000000000002",
-                    "text": "短帖标题",
-                    "created_at": "2026-04-24T09:00:00Z",
-                    "author": {"name": "example_thread", "username": "example_thread"},
-                }
-            ]
-            return SimpleNamespace(stdout=json.dumps(payload), stderr="", returncode=0)
-        if opencli_command_startswith(command, "opencli", "twitter", "article", "9000000000000000002"):
-            return SimpleNamespace(
-                stdout="",
-                stderr="Tweet 9000000000000000002 has no article content",
-                returncode=1,
-            )
-        if opencli_command_startswith(command, "opencli", "twitter", "thread", "9000000000000000002"):
-            payload = [
-                {
-                    "id": "9000000000000000002",
-                    "author": "example_thread",
-                    "text": "主帖：这是线程的开头。",
-                    "url": "https://x.com/example_thread/status/9000000000000000002",
-                },
-                {
-                    "id": "9000000000000000003",
-                    "author": "example_thread",
-                    "text": "回复一：这里补充了更完整的背景信息。",
-                    "url": "https://x.com/example_thread/status/9000000000000000003",
-                },
-                {
-                    "id": "9000000000000000004",
-                    "author": "example_thread",
-                    "text": "回复二：这里给出了结论和链接。",
-                    "url": "https://x.com/example_thread/status/9000000000000000004",
-                },
-            ]
-            return SimpleNamespace(stdout=json.dumps(payload), stderr="", returncode=0)
-        return SimpleNamespace(stdout="", stderr="", returncode=1)
+    def fake_run(command, **kwargs):
+        for suffix, (payload, stderr, returncode) in responses.items():
+            if opencli_command_startswith(command, "opencli", "twitter", *suffix):
+                stdout = payload if isinstance(payload, str) else json.dumps(payload)
+                return SimpleNamespace(stdout=stdout, stderr=stderr, returncode=returncode)
+        raise AssertionError(command)
+
+    return fake_run
+
+
+def test_async_content_enrichment_adds_x_thread_when_available(tmp_path, monkeypatch):
+    fake_opencli_run = _x_opencli_fake({('list-tweets',): ([{'id': '9000000000000000002',
+                          'url': 'https://x.com/example_thread/status/9000000000000000002',
+                          'text': '短帖标题',
+                          'created_at': '2026-04-24T09:00:00Z',
+                          'author': {'name': 'example_thread', 'username': 'example_thread'}}],
+                        '',
+                        0),
+     ('article', '9000000000000000002'): ('', 'Tweet 9000000000000000002 has no article content', 1),
+     ('thread', '9000000000000000002'): ([{'id': '9000000000000000002',
+                                           'author': 'example_thread',
+                                           'text': '主帖：这是线程的开头。',
+                                           'url': 'https://x.com/example_thread/status/9000000000000000002'},
+                                          {'id': '9000000000000000003',
+                                           'author': 'example_thread',
+                                           'text': '回复一：这里补充了更完整的背景信息。',
+                                           'url': 'https://x.com/example_thread/status/9000000000000000003'},
+                                          {'id': '9000000000000000004',
+                                           'author': 'example_thread',
+                                           'text': '回复二：这里给出了结论和链接。',
+                                           'url': 'https://x.com/example_thread/status/9000000000000000004'}],
+                                         '',
+                                         0)})
 
     monkeypatch.setattr("backend.infrastructure.connectors.opencli.subprocess.run", fake_opencli_run)
     monkeypatch.setattr("backend.application.enrichment.web_content.subprocess.run", fake_opencli_run)
@@ -431,39 +421,25 @@ def test_async_content_enrichment_adds_x_thread_when_available(tmp_path, monkeyp
     assert original_blocks[0]["status"] == "preserved"
 
 def test_async_content_enrichment_adds_x_article_when_available(tmp_path, monkeypatch):
-    def fake_opencli_run(command, **kwargs):
-        from types import SimpleNamespace
-
-        if opencli_command_startswith(command, "opencli", "twitter", "list-tweets"):
-            payload = [
-                {
-                    "id": "9000000000000000002",
-                    "url": "https://x.com/example_thread/status/9000000000000000002",
-                    "text": "短帖标题",
-                    "created_at": "2026-04-24T09:00:00Z",
-                    "author": {"name": "example_thread", "username": "example_thread"},
-                }
-            ]
-            return SimpleNamespace(stdout=json.dumps(payload), stderr="", returncode=0)
-        if opencli_command_startswith(command, "opencli", "twitter", "article", "9000000000000000002"):
-            payload = {
-                "title": "X Article title",
-                "author": "example_thread",
-                "content": "这是 X Article 的长文正文，明显比单条 tweet 更完整，也比线程更适合作为正文来源。",
-                "url": "https://x.com/i/article/123",
-            }
-            return SimpleNamespace(stdout=json.dumps(payload), stderr="", returncode=0)
-        # Phase 1: thread is fetched independently — return a valid payload
-        if opencli_command_startswith(command, "opencli", "twitter", "thread", "9000000000000000002"):
-            payload = [
-                {
-                    "id": "9000000000000000002",
-                    "author": "example_thread",
-                    "text": "回复帖，但不应出现在卡片正文中",
-                },
-            ]
-            return SimpleNamespace(stdout=json.dumps(payload), stderr="", returncode=0)
-        return SimpleNamespace(stdout="", stderr="", returncode=1)
+    fake_opencli_run = _x_opencli_fake({('list-tweets',): ([{'id': '9000000000000000002',
+                          'url': 'https://x.com/example_thread/status/9000000000000000002',
+                          'text': '短帖标题',
+                          'created_at': '2026-04-24T09:00:00Z',
+                          'author': {'name': 'example_thread', 'username': 'example_thread'}}],
+                        '',
+                        0),
+     ('article', '9000000000000000002'): ({'title': 'X Article title',
+                                           'author': 'example_thread',
+                                           'content': '这是 X Article 的长文正文，明显比单条 tweet '
+                                                      '更完整，也比线程更适合作为正文来源。',
+                                           'url': 'https://x.com/i/article/123'},
+                                          '',
+                                          0),
+     ('thread', '9000000000000000002'): ([{'id': '9000000000000000002',
+                                           'author': 'example_thread',
+                                           'text': '回复帖，但不应出现在卡片正文中'}],
+                                         '',
+                                         0)})
 
     monkeypatch.setattr("backend.infrastructure.connectors.opencli.subprocess.run", fake_opencli_run)
     monkeypatch.setattr("backend.application.enrichment.web_content.subprocess.run", fake_opencli_run)
@@ -497,34 +473,22 @@ def test_async_content_enrichment_adds_x_article_when_available(tmp_path, monkey
 # ====================================================================
 
 def test_async_content_enrichment_adds_x_repost_expansion(tmp_path, monkeypatch):
-    def fake_opencli_run(command, **kwargs):
-        from types import SimpleNamespace
-
-        if opencli_command_startswith(command, "opencli", "twitter", "list-tweets"):
-            payload = [
-                {
-                    "id": "9000000000000000002",
-                    "url": "https://x.com/example_thread/status/9000000000000000002",
-                    "text": "短帖标题",
-                    "created_at": "2026-04-24T09:00:00Z",
-                    "author": {"name": "example_thread", "username": "example_thread"},
-                    "is_retweet": True,
-                }
-            ]
-            return SimpleNamespace(stdout=json.dumps(payload), stderr="", returncode=0)
-        if opencli_command_startswith(command, "opencli", "twitter", "article", "9000000000000000002"):
-            return SimpleNamespace(stdout="", stderr="no article", returncode=1)
-        if opencli_command_startswith(command, "opencli", "twitter", "thread", "9000000000000000002"):
-            return SimpleNamespace(stdout="[]", stderr="", returncode=0)
-        if opencli_command_startswith(command, "opencli", "twitter", "retweet", "9000000000000000002"):
-            payload = {
-                "id": "9000000000000000006",
-                "author": "original_author",
-                "text": "这是被转发的原始帖子内容。",
-                "url": "https://x.com/original_author/status/9000000000000000006",
-            }
-            return SimpleNamespace(stdout=json.dumps(payload), stderr="", returncode=0)
-        return SimpleNamespace(stdout="", stderr="", returncode=1)
+    fake_opencli_run = _x_opencli_fake({('list-tweets',): ([{'id': '9000000000000000002',
+                          'url': 'https://x.com/example_thread/status/9000000000000000002',
+                          'text': '短帖标题',
+                          'created_at': '2026-04-24T09:00:00Z',
+                          'author': {'name': 'example_thread', 'username': 'example_thread'},
+                          'is_retweet': True}],
+                        '',
+                        0),
+     ('article', '9000000000000000002'): ('', 'no article', 1),
+     ('thread', '9000000000000000002'): ([], '', 0),
+     ('retweet', '9000000000000000002'): ({'id': '9000000000000000006',
+                                           'author': 'original_author',
+                                           'text': '这是被转发的原始帖子内容。',
+                                           'url': 'https://x.com/original_author/status/9000000000000000006'},
+                                          '',
+                                          0)})
 
     monkeypatch.setattr("backend.infrastructure.connectors.opencli.subprocess.run", fake_opencli_run)
     monkeypatch.setattr("backend.application.enrichment.web_content.subprocess.run", fake_opencli_run)
@@ -549,36 +513,23 @@ def test_async_content_enrichment_adds_x_repost_expansion(tmp_path, monkeypatch)
     assert original_blocks == []
 
 def test_async_content_enrichment_adds_x_quote_expansion(tmp_path, monkeypatch):
-    def fake_opencli_run(command, **kwargs):
-        from types import SimpleNamespace
-
-        if opencli_command_startswith(command, "opencli", "twitter", "list-tweets"):
-            payload = [
-                {
-                    "id": "9000000000000000002",
-                    "url": "https://x.com/example_thread/status/9000000000000000002",
-                    "text": "引用的短帖",
-                    "created_at": "2026-04-24T09:00:00Z",
-                    "author": {"name": "example_thread", "username": "example_thread"},
-                    "quoted_tweet": {"id": "9000000000000000005", "text": "引用占位"},
-                }
-            ]
-            return SimpleNamespace(stdout=json.dumps(payload), stderr="", returncode=0)
-        if opencli_command_startswith(command, "opencli", "twitter", "article", "9000000000000000002"):
-            return SimpleNamespace(stdout="", stderr="no article", returncode=1)
-        if opencli_command_startswith(command, "opencli", "twitter", "thread", "9000000000000000002"):
-            return SimpleNamespace(stdout="[]", stderr="", returncode=0)
-        if opencli_command_startswith(command, "opencli", "twitter", "retweet", "9000000000000000002"):
-            return SimpleNamespace(stdout="{}", stderr="", returncode=0)
-        if opencli_command_startswith(command, "opencli", "twitter", "quote", "9000000000000000002"):
-            payload = {
-                "id": "9000000000000000005",
-                "author": "quoted_author",
-                "text": "这是被引用的帖子内容，提供了额外的上下文。",
-                "url": "https://x.com/quoted_author/status/9000000000000000005",
-            }
-            return SimpleNamespace(stdout=json.dumps(payload), stderr="", returncode=0)
-        return SimpleNamespace(stdout="", stderr="", returncode=1)
+    fake_opencli_run = _x_opencli_fake({('list-tweets',): ([{'id': '9000000000000000002',
+                          'url': 'https://x.com/example_thread/status/9000000000000000002',
+                          'text': '引用的短帖',
+                          'created_at': '2026-04-24T09:00:00Z',
+                          'author': {'name': 'example_thread', 'username': 'example_thread'},
+                          'quoted_tweet': {'id': '9000000000000000005', 'text': '引用占位'}}],
+                        '',
+                        0),
+     ('article', '9000000000000000002'): ('', 'no article', 1),
+     ('thread', '9000000000000000002'): ([], '', 0),
+     ('retweet', '9000000000000000002'): ({}, '', 0),
+     ('quote', '9000000000000000002'): ({'id': '9000000000000000005',
+                                         'author': 'quoted_author',
+                                         'text': '这是被引用的帖子内容，提供了额外的上下文。',
+                                         'url': 'https://x.com/quoted_author/status/9000000000000000005'},
+                                        '',
+                                        0)})
 
     monkeypatch.setattr("backend.infrastructure.connectors.opencli.subprocess.run", fake_opencli_run)
     monkeypatch.setattr("backend.application.enrichment.web_content.subprocess.run", fake_opencli_run)

@@ -20,6 +20,7 @@ from backend.application.usecases.browser_session_profile import (
     _ensure_profile_binding,
     _profile_payload,
     _refresh_existing_profile_binding,
+    _with_detail,
 )
 from backend.application.usecases.browser_session_x import (
     _apply_x_readiness_probe,
@@ -38,6 +39,7 @@ from backend.infrastructure.browser.session_state import BrowserSessionState
 from backend.infrastructure.browser.setup_launcher import bind_infoos_chrome
 from backend.infrastructure.opencli.runtime import opencli_browser_lock, resolve_opencli_executable
 from backend.infrastructure.opencli.tab_lease import opencli_profile_write_lock
+from backend.infrastructure.security.redaction import redact_text
 from backend.application.usecases.opencli_status import (
     _infoos_chrome_profile_headless,
     _infoos_chrome_profile_running,
@@ -196,7 +198,10 @@ def _prepare_opencli_browser_session_locked(
                 return result
             _append_issue(
                 result,
-                "无法刷新专用浏览器的绑定状态",
+                _with_detail(
+                    "无法刷新专用浏览器的绑定状态",
+                    redact_text(rebound["error"]) if not rebound["ok"] else "",
+                ),
             )
         else:
             _append_issue(

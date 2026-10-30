@@ -55,7 +55,7 @@ def test_wrong_method(client, method):
 
 
 @pytest.mark.parametrize("uri", ["/favicon.ico", "/r/card/one", "/r/brief/2026-09-30", "/assets/index.js", "/api/card-preview/one?x=1",
-    "/api/card-preview/assets/one", "/api/intelligence/daily-brief/2026-09-30", "/api/intelligence/knowledge", "/api/intelligence/knowledge/kc_one", "/r/knowledge", "/r/knowledge/kc_one"])
+    "/api/card-preview/assets/one", "/api/card-preview/assets/one/thumbnail", "/api/intelligence/daily-brief/2026-09-30", "/api/intelligence/knowledge", "/api/intelligence/knowledge/kc_one", "/r/knowledge", "/r/knowledge/kc_one"])
 @pytest.mark.parametrize("method", ["GET", "HEAD"])
 def test_reader_paths(client, uri, method):
     assert client.get("/api/internal/reader-authorize", headers=headers(**{"X-Original-URI": uri, "X-Original-Method": method})).status_code == 204
@@ -96,7 +96,7 @@ def test_shared_webauth_socket(monkeypatch):
 
 
 @pytest.mark.parametrize("path", ["/favicon.ico", "/r/card/one", "/r/brief/2026-09-30",
-    "/api/card-preview/one", "/api/card-preview/assets/one", "/api/intelligence/daily-brief/2026-09-30", "/api/intelligence/knowledge/kc_one", "/r/knowledge", "/r/knowledge/kc_one"])
+    "/api/card-preview/one", "/api/card-preview/assets/one", "/api/card-preview/assets/one/thumbnail", "/api/intelligence/daily-brief/2026-09-30", "/api/intelligence/knowledge/kc_one", "/r/knowledge", "/r/knowledge/kc_one"])
 def test_product_reader_head_routes(tmp_path, path):
     from backend.app.main import create_app
     app = create_app(tmp_path)

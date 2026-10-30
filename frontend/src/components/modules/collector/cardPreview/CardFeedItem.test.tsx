@@ -33,3 +33,15 @@ describe("evaluated feed excerpt", () => {
     }
   });
 });
+
+describe("video cover thumbnails", () => {
+  it.each([true, false])("uses a thumbnail when available: %s", (hasThumbnail) => {
+    const { container } = render(<CardFeedItem item={{ ...item, cover_kind: "video", cover_asset_url: "/original.mp4",
+      cover_thumbnail_url: hasThumbnail ? "/thumbnail.webp" : null }} selected={false} onSelect={() => {}} />);
+    const cover = container.querySelector(".card-feed-item__cover")!;
+    expect(cover.querySelector("img")?.getAttribute("src") ?? null).toBe(hasThumbnail ? "/thumbnail.webp" : null);
+    expect(Boolean(cover.querySelector("video"))).toBe(!hasThumbnail);
+    if (!hasThumbnail) expect(cover.querySelector("video")).toHaveAttribute("src", "/original.mp4");
+    expect(cover.querySelector('[aria-label="视频"]')).toBeInTheDocument();
+  });
+});

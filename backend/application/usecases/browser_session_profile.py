@@ -28,6 +28,7 @@ from pathlib import Path
 from backend.infrastructure.browser import session_state
 from backend.infrastructure.browser.session_state import BrowserSessionState
 from backend.infrastructure.opencli.runtime import resolve_opencli_executable
+from backend.infrastructure.security.redaction import redact_text, summarize_subprocess_output
 from backend.application.usecases.opencli_status import (
     _infoos_chrome_profile_pids,
     _infoos_chrome_profile_running,
@@ -36,6 +37,10 @@ from backend.application.usecases.source_config import DEFAULT_INFOOS_CHROME_PRO
 
 _INFOOS_OPENCLI_ALIAS = "infoos-fetch"
 _PROFILE_LIST_TIMEOUT_SECONDS = 10
+
+
+def _with_detail(message: str, detail: str) -> str:
+    return f"{message}：{detail}" if detail else message
 
 
 def _profile_payload(
@@ -134,13 +139,14 @@ def _connected_opencli_profile_names(executable: str) -> tuple[list[str], str | 
             timeout=_PROFILE_LIST_TIMEOUT_SECONDS,
             check=False,
         )
-    except FileNotFoundError:
-        return [], "无法读取专用 OpenCLI 配置状态"
-    except subprocess.TimeoutExpired:
-        return [], "无法读取专用 OpenCLI 配置状态"
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        return [], _with_detail("无法读取专用 OpenCLI 配置状态", redact_text(str(exc)))
     output = "\n".join(part for part in [profile_list.stdout, profile_list.stderr] if part)
     if profile_list.returncode != 0:
-        return [], "无法读取专用 OpenCLI 配置列表"
+        return [], _with_detail(
+            "无法读取专用 OpenCLI 配置列表",
+            summarize_subprocess_output(profile_list.stdout, profile_list.stderr),
+        )
     names: list[str] = []
     for profile in _parse_profile_list(output):
         if profile["status"] == "connected" and profile["name"] not in names:
@@ -250,15 +256,15 @@ def _run_profile_command(command: list[str], result: dict) -> bool:
             timeout=_PROFILE_LIST_TIMEOUT_SECONDS,
             check=False,
         )
-    except FileNotFoundError:
-        result["profile"]["binding_error"] = "无法操作专用 OpenCLI 配置"
-        return False
-    except subprocess.TimeoutExpired:
-        result["profile"]["binding_error"] = "无法操作专用 OpenCLI 配置"
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        result["profile"]["binding_error"] = _with_detail(
+            "无法操作专用 OpenCLI 配置", redact_text(str(exc))
+        )
         return False
     if completed.returncode != 0:
-        result["profile"]["binding_error"] = (
-            "专用 OpenCLI 配置操作失败"
+        result["profile"]["binding_error"] = _with_detail(
+            "专用 OpenCLI 配置操作失败",
+            summarize_subprocess_output(completed.stdout, completed.stderr),
         )
         return False
     return True

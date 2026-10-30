@@ -121,17 +121,15 @@ def read_collection_environment(
 
 
 def _component_item(component_id: str, component: ComponentState) -> ComponentItem:
-    # Old snapshots proved installation only, not a live Bridge connection.
-    installation_only = component_id == "opencli_bridge" and component.status in {"installed", "missing"}
     return {
         "id": component_id,
         "name": COMPONENT_NAMES[component_id],
-        "status": "unknown" if installation_only else component.status,
-        "version": None if installation_only else component.version,
+        "status": component.status,
+        "version": component.version,
         "is_chrome": component_id == "dedicated_chrome",
         "action": "launch" if component_id == "dedicated_chrome" else "check" if component_id == "opencli_bridge" else None,
-        "last_checked_at": None if installation_only else component.last_checked,
-        "detail_code": None if installation_only else component.detail_code,
+        "last_checked_at": component.last_checked,
+        "detail_code": component.detail_code,
     }
 
 

@@ -172,6 +172,30 @@ def test_prepare_opencli_browser_session_prefers_env_launcher(monkeypatch, isola
     assert not any(call and call[0] == str(default_launcher) for call in calls)
 
 
+def _browser_launch_fake(calls, launcher, *, version, launch_args, x_profile):
+    def fake_run(command, **kwargs):
+        command = normalize_opencli_command(command)
+        calls.append(command)
+        if command == ["opencli", "--version"]:
+            return SimpleNamespace(stdout=version, stderr="", returncode=0)
+        if command == ["opencli", "daemon", "status"]:
+            connected = calls.count(["opencli", "daemon", "status"]) > 1
+            state = "[OK] Connectivity: Browser Bridge extension connected\n" if connected else "[FAIL] Connectivity: Browser Bridge extension not connected\n"
+            return SimpleNamespace(stdout=state, stderr="", returncode=0)
+        if command == ["opencli", "profile", "list"]:
+            launched = any(call and call[0] == str(launcher) for call in calls)
+            return SimpleNamespace(stdout="ctx-infoos — connected v1.0.2\n" if launched else "", stderr="", returncode=0)
+        if command in (["opencli", "profile", "rename", "ctx-infoos", "infoos-fetch"],
+                       ["opencli", "profile", "use", "ctx-infoos"]):
+            return SimpleNamespace(stdout="", stderr="", returncode=0)
+        if command in ([str(launcher), *launch_args], [str(launcher), "--restart", *launch_args]):
+            return SimpleNamespace(stdout="", stderr="", returncode=0)
+        if command[:3] == ["opencli", "twitter", "profile"]:
+            return SimpleNamespace(stdout=x_profile, stderr="", returncode=0)
+        raise AssertionError(command)
+    return fake_run
+
+
 def test_prepare_opencli_browser_session_prefers_infoos_launcher(monkeypatch, isolate_opencli_lock, tmp_path):
     calls = []
     launcher = tmp_path / "opencli-infoos-chrome"
@@ -179,34 +203,7 @@ def test_prepare_opencli_browser_session_prefers_infoos_launcher(monkeypatch, is
     monkeypatch.setenv("INFOOS_CONFIG_PATH", str(tmp_path / "missing-config.yaml"))
     _isolate_browser_session_json(monkeypatch, tmp_path)
 
-    def fake_run(command, **kwargs):
-        command = normalize_opencli_command(command)
-        calls.append(command)
-        launcher_has_run = any(call and call[0] == str(launcher) for call in calls)
-        if command == ["opencli", "--version"]:
-            return SimpleNamespace(stdout="1.7.6\n", stderr="", returncode=0)
-        if command == ["opencli", "daemon", "status"]:
-            status_calls = sum(
-                1 for call in calls if call == ["opencli", "daemon", "status"]
-            )
-            if status_calls == 1:
-                return SimpleNamespace(stdout="[FAIL] Connectivity: Browser Bridge extension not connected\n", stderr="", returncode=0)
-            return SimpleNamespace(stdout="[OK] Connectivity: Browser Bridge extension connected\n", stderr="", returncode=0)
-        if command == ["opencli", "profile", "list"]:
-            stdout = "ctx-infoos — connected v1.0.2\n" if launcher_has_run else ""
-            return SimpleNamespace(stdout=stdout, stderr="", returncode=0)
-        if command == ["opencli", "profile", "rename", "ctx-infoos", "infoos-fetch"]:
-            return SimpleNamespace(stdout="", stderr="", returncode=0)
-        if command == ["opencli", "profile", "use", "ctx-infoos"]:
-            return SimpleNamespace(stdout="", stderr="", returncode=0)
-        if command in (
-            [str(launcher), "https://x.com/home", "--headless"],
-            [str(launcher), "--restart", "https://x.com/home", "--headless"],
-        ):
-            return SimpleNamespace(stdout="", stderr="", returncode=0)
-        if command[0] == "opencli" and command[1] == "twitter":
-            return SimpleNamespace(stdout=_LOGGED_IN_X_PROFILE, stderr="", returncode=0)
-        raise AssertionError(command)
+    fake_run = _browser_launch_fake(calls, launcher, version="1.7.6\n", launch_args=["https://x.com/home", "--headless"], x_profile=_LOGGED_IN_X_PROFILE)
 
     monkeypatch.setattr("backend.application.usecases.opencli_status.subprocess.run", fake_run)
     _patch_profile_running(monkeypatch, lambda: True)
@@ -242,34 +239,7 @@ def test_prepare_opencli_browser_session_passes_headless_when_runtime_config_ena
     # (not via the legacy _shared.DEFAULT_INFOOS_CONFIG_PATH constant).
     monkeypatch.setenv("INFOOS_CONFIG_PATH", str(config_path))
 
-    def fake_run(command, **kwargs):
-        command = normalize_opencli_command(command)
-        calls.append(command)
-        launcher_has_run = any(call and call[0] == str(launcher) for call in calls)
-        if command == ["opencli", "--version"]:
-            return SimpleNamespace(stdout="1.8.0\n", stderr="", returncode=0)
-        if command == ["opencli", "daemon", "status"]:
-            status_calls = sum(
-                1 for call in calls if call == ["opencli", "daemon", "status"]
-            )
-            if status_calls == 1:
-                return SimpleNamespace(stdout="[FAIL] Connectivity: Browser Bridge extension not connected\n", stderr="", returncode=0)
-            return SimpleNamespace(stdout="[OK] Connectivity: Browser Bridge extension connected\n", stderr="", returncode=0)
-        if command == ["opencli", "profile", "list"]:
-            stdout = "ctx-infoos — connected v1.0.2\n" if launcher_has_run else ""
-            return SimpleNamespace(stdout=stdout, stderr="", returncode=0)
-        if command == ["opencli", "profile", "rename", "ctx-infoos", "infoos-fetch"]:
-            return SimpleNamespace(stdout="", stderr="", returncode=0)
-        if command == ["opencli", "profile", "use", "ctx-infoos"]:
-            return SimpleNamespace(stdout="", stderr="", returncode=0)
-        if command in (
-            [str(launcher), "https://x.com/home", "--headless"],
-            [str(launcher), "--restart", "https://x.com/home", "--headless"],
-        ):
-            return SimpleNamespace(stdout="", stderr="", returncode=0)
-        if command[:3] == ["opencli", "twitter", "profile"]:
-            return SimpleNamespace(stdout=_LOGGED_IN_X_PROFILE, stderr="", returncode=0)
-        raise AssertionError(command)
+    fake_run = _browser_launch_fake(calls, launcher, version="1.8.0\n", launch_args=["https://x.com/home", "--headless"], x_profile=_LOGGED_IN_X_PROFILE)
 
     monkeypatch.setattr("backend.application.usecases.opencli_status.subprocess.run", fake_run)
     _patch_profile_running(monkeypatch, lambda: True)
@@ -297,34 +267,7 @@ def test_prepare_opencli_browser_session_uses_visible_window_when_runtime_config
     _isolate_browser_session_json(monkeypatch, tmp_path)
     monkeypatch.setenv("INFOOS_CONFIG_PATH", str(config_path))
 
-    def fake_run(command, **kwargs):
-        command = normalize_opencli_command(command)
-        calls.append(command)
-        launcher_has_run = any(call and call[0] == str(launcher) for call in calls)
-        if command == ["opencli", "--version"]:
-            return SimpleNamespace(stdout="1.8.0\n", stderr="", returncode=0)
-        if command == ["opencli", "daemon", "status"]:
-            status_calls = sum(
-                1 for call in calls if call == ["opencli", "daemon", "status"]
-            )
-            if status_calls == 1:
-                return SimpleNamespace(stdout="[FAIL] Connectivity: Browser Bridge extension not connected\n", stderr="", returncode=0)
-            return SimpleNamespace(stdout="[OK] Connectivity: Browser Bridge extension connected\n", stderr="", returncode=0)
-        if command == ["opencli", "profile", "list"]:
-            stdout = "ctx-infoos — connected v1.0.2\n" if launcher_has_run else ""
-            return SimpleNamespace(stdout=stdout, stderr="", returncode=0)
-        if command == ["opencli", "profile", "rename", "ctx-infoos", "infoos-fetch"]:
-            return SimpleNamespace(stdout="", stderr="", returncode=0)
-        if command == ["opencli", "profile", "use", "ctx-infoos"]:
-            return SimpleNamespace(stdout="", stderr="", returncode=0)
-        if command in (
-            [str(launcher), "https://x.com/home"],
-            [str(launcher), "--restart", "https://x.com/home"],
-        ):
-            return SimpleNamespace(stdout="", stderr="", returncode=0)
-        if command[:3] == ["opencli", "twitter", "profile"]:
-            return SimpleNamespace(stdout=_LOGGED_IN_X_PROFILE, stderr="", returncode=0)
-        raise AssertionError(command)
+    fake_run = _browser_launch_fake(calls, launcher, version="1.8.0\n", launch_args=["https://x.com/home"], x_profile=_LOGGED_IN_X_PROFILE)
 
     monkeypatch.setattr("backend.application.usecases.opencli_status.subprocess.run", fake_run)
     _patch_profile_running(monkeypatch, lambda: True)

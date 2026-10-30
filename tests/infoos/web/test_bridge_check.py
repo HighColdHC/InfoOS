@@ -28,8 +28,6 @@ def test_check_bridge_persists_connection_and_get_stays_passive(
     monkeypatch.setattr(collection_environment, "SETUP_STATE_PATH", state_path)
     state = SetupState.from_dict({})
     state.component_snapshot_at = "2026-07-31T09:38:34Z"
-    state.components["opencli_bridge"].status = "installed"
-    state.components["opencli_bridge"].version = "3"
     state.components["sqlite"].version = "3.45.1"
     save_state(state_path, state)
     run = Mock(return_value=subprocess.CompletedProcess([], returncode, output, ""))

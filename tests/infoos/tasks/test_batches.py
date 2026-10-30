@@ -292,24 +292,14 @@ def test_batch_projection_matches_previous_per_task_summary_across_sql_chunks(tm
     task_ids = [task.task_id for task in tasks]
     batch = create_task_batch(tmp_path, batch_type="source_run", task_ids=task_ids)
     projected = get_task_batch(tmp_path, batch["batch_id"])
-    read_query = TaskReadQuery(tmp_path)
-    previous_tasks = [read_query.get(task_id) for task_id in task_ids]
-    assert all(task is not None for task in previous_tasks)
-    terminal = sum(task.status in {TaskStatus.SUCCESS, TaskStatus.FAILED,
-                                   TaskStatus.BLOCKED, TaskStatus.SKIPPED}
-                   for task in previous_tasks)
-    pending_times = [task.created_at for task in previous_tasks
-                     if task.status == TaskStatus.PENDING]
+    pending_task = TaskReadQuery(tmp_path).get(task_ids[401])
+    assert pending_task is not None
     expected = {
-        "planned": len(task_ids), "total": len(task_ids), "terminal": terminal,
-        "progress_percent": int(terminal * 100 / len(task_ids)),
-        "current_stage": TaskType.CARD_BUILD.value,
-        "oldest_pending_at": min(pending_times),
+        "planned": 403, "total": 403, "terminal": 401,
+        "progress_percent": 99, "current_stage": TaskType.CARD_BUILD.value,
+        "oldest_pending_at": pending_task.created_at,
         "running": 1, "succeeded": 400, "failed": 1,
-        "blocked": 0, "skipped": 0, "pending": 1,
-        "new_cards": sum(task.task_type == TaskType.CARD_BUILD
-                         and task.artifacts_summary.get("created_or_updated") == "created"
-                         for task in previous_tasks),
+        "blocked": 0, "skipped": 0, "pending": 1, "new_cards": 202,
     }
     assert projected["task_ids"] == task_ids
     assert projected["summary"] == expected

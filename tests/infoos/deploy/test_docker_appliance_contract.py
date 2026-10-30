@@ -375,7 +375,7 @@ def test_reader_locations_use_internal_auth_and_reject_mutations():
     import re
     config = (DOCKER_DIR / "rootfs/opt/base/etc/nginx/default_site.conf").read_text()
     for location in ("^~ /r/", "^~ /assets/",
-                     "~ ^/api/card-preview(?:/[^/]+)?$", "~ ^/api/card-preview/assets/[^/]+$",
+                     "~ ^/api/card-preview(?:/[^/]+)?$", "~ ^/api/card-preview/assets/[^/]+(?:/thumbnail)?$",
                      "~ ^/api/intelligence/(?:daily-brief/[^/]+|knowledge(?:/[^/]+)?)$"):
         block = config.split(f"location {location} {{", 1)[1].split("\n    }", 1)[0]
         assert "auth_request /_infoos_reader_auth;" in block

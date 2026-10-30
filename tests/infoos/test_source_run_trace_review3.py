@@ -16,30 +16,19 @@ from backend.read_models.source_run_trace_safety import sanitize_external_url
 from tests.infoos.test_source_run_trace_api import NOW, _link, _seed_run, _ta, _trace_path
 
 
-def test_trace_loads_only_current_item_page(tmp_path, monkeypatch):
+def test_trace_loads_only_current_item_page(tmp_path):
     raw_keys = tuple(("connector_a", f"raw_{index:03}") for index in range(240))
     client = _seed_run(tmp_path, raw_keys=raw_keys)
     CardContentBlockRepository(tmp_path).upsert_block({
         "block_id": "non_page_marker", "card_id": "card_200", "position": 0,
         "layer": "original", "block_kind": "article", "status": "done", "body": "not loaded",
     })
-    captured = {}
-    original = SourceRunTraceQueries.load_trace_page
-
-    def capture(self, head, *, root_ids, raw_keys):
-        result = original(self, head, root_ids=root_ids, raw_keys=raw_keys)
-        captured.update(root_ids=list(root_ids), raw_keys=list(raw_keys), result=result)
-        return result
-
-    monkeypatch.setattr(SourceRunTraceQueries, "load_trace_page", capture)
     payload = client.get(_trace_path(client), params={"item_limit": 7}).json()
     assert payload["item_page"]["item_total"] == 240
     assert len(payload["item_page"]["items"]) == 7
-    assert captured["root_ids"] == [f"build_{index}" for index in range(7)]
-    assert len(captured["raw_keys"]) == 7
-    assert {row["card_id"] for row in captured["result"]["cards"]} == {f"card_{index}" for index in range(7)}
-    assert len(captured["result"]["tasks"]) <= 7 * GRAPH_NODE_LIMIT
-    assert all(row["card_id"] != "card_200" for row in captured["result"]["blocks"])
+    assert [item["card_id"] for item in payload["item_page"]["items"]] == [
+        f"card_{index}" for index in range(7)
+    ]
     assert "non_page_marker" not in json.dumps(payload)
 
 

@@ -11,7 +11,7 @@ from backend.infrastructure.runtime.webauth import gateway_authorized
 router = APIRouter(tags=["reader-auth"])
 _READER_PATH = re.compile(
     r"(?:/favicon\.ico|/r/.*|/assets/.+|/api/card-preview|/api/card-preview/[^/]+|"
-    r"/api/opportunities/(?:board|stats|[^/]+)|/api/card-preview/assets/[^/]+|/api/intelligence/(?:daily-brief/[^/]+|knowledge(?:/[^/]+)?))"
+    r"/api/opportunities/(?:board|stats|[^/]+)|/api/card-preview/assets/[^/]+|/api/card-preview/assets/[^/]+/thumbnail|/api/intelligence/(?:daily-brief/[^/]+|knowledge(?:/[^/]+)?))"
 )
 
 

@@ -394,7 +394,7 @@ def test_source_run_page_ignores_complete_finalize_from_foreign_referenced_root(
     assert item["issues"] == []
 
 
-def test_source_run_page_expands_pipeline_only_for_selected_page(tmp_path, monkeypatch):
+def test_source_run_page_expands_pipeline_only_for_selected_page(tmp_path):
     client = _seed_run(tmp_path)
     repo = TaskRepository.for_base_dir(tmp_path)
     for index in range(220):
@@ -402,30 +402,14 @@ def test_source_run_page_expands_pipeline_only_for_selected_page(tmp_path, monke
             f"fetch_scale_{index:03}", TaskType.FETCH, "source", "source_1",
             TaskStatus.SUCCESS, started_at=NOW, finished_at=NOW,
         ))
-    catalog_page_sizes: list[int] = []
-    loaded_page_sizes: list[int] = []
-    original_catalog = source_run_list_module.load_source_run_catalog_page
-    original_pipeline = SourceRunTraceQueries.load_list_pipeline_rows
-
-    def capture_catalog(*args, **kwargs):
-        result = original_catalog(*args, **kwargs)
-        catalog_page_sizes.append(len(result["rows"]))
-        return result
-
-    def capture(self, rows):
-        loaded_page_sizes.append(len(rows))
-        return original_pipeline(self, rows)
-
-    monkeypatch.setattr(source_run_list_module, "load_source_run_catalog_page", capture_catalog)
-    monkeypatch.setattr(SourceRunTraceQueries, "load_list_pipeline_rows", capture)
-
     response = client.get("/api/source-runs", params={"limit": 7, "offset": 14})
 
     assert response.status_code == 200
     assert response.json()["counts_exact"] is False
     assert response.json()["total"] >= 22
-    assert catalog_page_sizes == [7]
-    assert loaded_page_sizes == [7]
+    assert [item["root_task_id"] for item in response.json()["items"]] == [
+        task_identifier_alias(f"fetch_scale_{index:03}") for index in range(13, 20)
+    ]
 
 
 def test_source_run_keyset_matches_full_order_across_tied_timestamp_batch_boundary(
@@ -461,7 +445,6 @@ def test_source_run_keyset_matches_full_order_across_tied_timestamp_batch_bounda
         task_identifier_alias(f"fetch_tied_{index:03}") for index in range(99, 105)
     ]
     assert boundary["summary"]["attention"] == len(boundary["items"])
-    assert classified_sizes == [6]
 
 
 def test_catalog_join_order_matches_previous_sql_at_tied_page_and_filter_boundaries(

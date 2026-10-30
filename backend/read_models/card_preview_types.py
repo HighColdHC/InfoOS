@@ -39,6 +39,7 @@ class PreviewItem(TypedDict):
     excerpt: str | None
     summary_excerpt: str | None
     cover_asset_url: str | None
+    cover_thumbnail_url: str | None
     cover_kind: str | None
     media_count: int
     evaluation: PreviewEvaluation | None
@@ -105,6 +106,7 @@ class PreviewAsset(TypedDict):
     status: str
     cleanup_state: str
     asset_url: str
+    thumbnail_url: str | None
 
 
 class PreviewMediaGap(TypedDict):

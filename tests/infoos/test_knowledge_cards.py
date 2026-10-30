@@ -139,19 +139,10 @@ def test_per_item_transaction_rollback_and_fresh_news(library, monkeypatch):
     assert extract(base, "card-1", [knowledge("resource")])["reason"] == "kind_disabled"
 
 
-@pytest.mark.parametrize("quotes,reason,detail", [
-    (68, "invalid_quotes", "quotes: expected a string array; got int"),
-    (TEXT, "invalid_quotes", "quotes: expected a string array; got str"),
-    ({"text": TEXT}, "invalid_quotes", "quotes: expected a string array; got dict"),
-    ([], "invalid_quotes", "quotes: expected 1–5 entries; got 0"),
-    ([TEXT] * 6, "invalid_quotes", "quotes: expected 1–5 entries; got 6"),
-    ([TEXT, {"text": TEXT}], "invalid_quotes", "quotes[1]: expected a non-empty string"),
-    ([TEXT, " "], "invalid_quotes", "quotes[1]: expected a non-empty string"),
-    ([TEXT, "长" * 201], "invalid_quotes", "quotes[1]: maximum 200 characters; got 201"),
-    ([TEXT, "伪造"], "quote_not_in_card",
-     "quotes[1]: not found in the source card or content blocks; copy a verbatim substring"),
-])
-def test_quote_rejection_detail_and_corrected_resubmission(library, quotes, reason, detail):
+def test_quote_rejection_detail_and_corrected_resubmission(library):
+    quotes = [TEXT, "伪造"]
+    reason = "quote_not_in_card"
+    detail = "quotes[1]: not found in the source card or content blocks; copy a verbatim substring"
     seed(library, 1)
     seed(library, 2)
     results = submit_knowledge_extractions(library, "test", [

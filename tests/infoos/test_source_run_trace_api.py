@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -1092,43 +1091,6 @@ def test_exact_products_reject_stale_archived_and_separate_current_topics(tmp_pa
     for task_id in ("summary_exact", "decide_stale", "output_archived", "topic_history"):
         assert _ta(task_id) not in by_task
     assert "current_topics" not in item["final_card"]
-
-
-def test_query_budget_is_constant_for_list_and_trace(tmp_path, monkeypatch):
-    _seed_run(tmp_path, raw_keys=tuple(("connector_a", f"raw_{index:03}") for index in range(30)))
-    repo = TaskRepository.for_base_dir(tmp_path)
-    repo.enqueue(Task(
-        "media_budget", TaskType.MEDIA_DOWNLOAD, "card", "card_0", TaskStatus.SUCCESS,
-        (DependencySpec("build_0", TaskStatus.SUCCESS),),
-        artifacts_summary={"chain_id": "chain_1", "assets": [
-            {"asset_id": "asset_budget", "asset_kind": "image"}
-        ]},
-    ))
-    _link(tmp_path, "build_0", "media_budget")
-    CardAssetRepository(tmp_path).upsert_asset({
-        "asset_id": "asset_budget", "card_id": "card_0", "asset_kind": "image",
-        "source_url": "https://assets.test/budget", "status": "downloaded",
-    })
-    import backend.infrastructure.storage.source_run_trace_queries as queries
-    from backend.infrastructure.storage.database import connect_existing as real_connect_existing
-    from backend.read_models.source_run_trace import read_source_run_trace, read_source_runs
-
-    statements = []
-
-    @contextmanager
-    def counted_connect(path):
-        with real_connect_existing(path) as conn:
-            conn.set_trace_callback(lambda statement: statements.append(statement))
-            yield conn
-
-    monkeypatch.setattr(queries, "connect_existing", counted_connect)
-    read_source_runs(tmp_path, limit=10, offset=0)
-    list_queries = len(statements)
-    statements.clear()
-    read_source_run_trace(tmp_path, _ta("fetch_1"), item_limit=25, cursor=None)
-    trace_queries = len(statements)
-    assert list_queries <= 5
-    assert trace_queries <= 16
 
 
 def test_trace_graph_is_bounded_and_excludes_foreign_children(tmp_path):

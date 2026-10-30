@@ -45,6 +45,7 @@ export type CardPreviewListItem = {
   summary_excerpt?: string | null;
   cover_kind?: "image" | "video" | null;
   cover_asset_url?: string | null;
+  cover_thumbnail_url?: string | null;
   media_count?: number;
   evaluation: CardPreviewEvaluation | null;
   opportunity?: { has_breakdown: boolean; next_step: "verify" | "observe" | "skip" } | null;
@@ -72,6 +73,7 @@ export type CardPreviewAsset = {
   content_hash?: string | null;
   cleanup_state?: string | null;
   asset_url: string;
+  thumbnail_url?: string | null;
 };
 
 export type EngagementMetrics = Partial<Record<

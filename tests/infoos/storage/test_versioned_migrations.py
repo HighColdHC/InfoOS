@@ -80,7 +80,7 @@ def _without_v0003_indexes(snapshot: dict[str, object]) -> dict[str, object]:
     for name in V0003_INDEXES | V0004_INDEXES | V0008_INDEXES | V0009_INDEXES | V0012_INDEXES | V0023_INDEXES | {"idx_raw_items_first_seen_source", "idx_cards_status_sort", "idx_cards_status_published"}:
         indexes.pop(name, None)
     later_tables = V0004_TABLES | V0005_TABLES | V0008_TABLES | {"source_change_audit", "opportunity_breakdowns", "opportunity_verifications", "notification_outbox", "auth_qr_rounds", "opportunity_follow_up_events"}
-    later_tables |= {"reader_page_views", "raw_item_candidate_flags"}
+    later_tables |= {"reader_page_views", "raw_item_candidate_flags", "card_asset_thumbnails"}
     later_tables |= {"knowledge_cards", "knowledge_extractions", "knowledge_evidence", "knowledge_status_events"}
     later_tables |= {name for name in snapshot['columns'] if name.startswith(('card_text_fts', 'card_block_text_fts'))}
     indexes = {name: value for name, value in indexes.items() if value[0] not in later_tables}

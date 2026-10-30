@@ -42,6 +42,7 @@ export function CardPreviewModule() {
               feed.detail.body_blocks.find((block) => block.layer === "intelligence" && block.block_kind === "summary")
                 ?.content ?? null,
             cover_asset_url: feed.detail.image_assets.at(0)?.asset_url ?? feed.detail.video_assets.at(0)?.asset_url ?? null,
+            cover_thumbnail_url: feed.detail.image_assets.at(0)?.thumbnail_url ?? feed.detail.video_assets.at(0)?.thumbnail_url ?? null,
             cover_kind: feed.detail.image_assets.length
               ? ("image" as const)
               : feed.detail.video_assets.length

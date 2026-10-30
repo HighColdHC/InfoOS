@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import TypeVar, TypedDict
+from typing import TypeVar, TypedDict, cast
 from collections.abc import Sequence
 from urllib.parse import quote
 
@@ -27,6 +27,8 @@ from backend.read_models.knowledge import knowledge_for_card
 
 from backend.infrastructure.storage.cards_types import CardRow
 from backend.infrastructure.storage.card_assets_types import CardAssetRow
+from backend.infrastructure.storage.card_asset_thumbnails import CardAssetThumbnailRepository
+from backend.infrastructure.storage.card_asset_thumbnails_types import CardAssetThumbnailRow
 from backend.infrastructure.storage.card_content_blocks_types import CardBodyBlockRow
 from backend.read_models.card_preview_types import (
     PreviewPage, PreviewDetail, PreviewBodyBlock, PreviewAsset, PreviewMediaGap,
@@ -105,7 +107,7 @@ def read_card_preview_page(
     from backend.infrastructure.storage.card_browse_query import read_preview_opportunities
     opportunities = read_preview_opportunities(base_path, [card["card_id"] for card in page_cards])
     return {
-        "items": project_preview_items(base_path, page_cards, blocks, assets, sources, evaluations, opportunities),
+        "items": project_preview_items(page_cards, blocks, assets, sources, evaluations, opportunities),
         "total": total, "limit": bounded_limit, "offset": bounded_offset,
         "processing_total": read_processing_total(base_path),
         "sort": sort,
@@ -123,6 +125,7 @@ def read_card_preview_detail(base_dir: Path | str, card_id: str) -> PreviewDetai
         return None
 
     assets = _deliverable_assets(base_path, CardAssetRepository(base_path).list_for_card(card_id))
+    states = CardAssetThumbnailRepository(base_path).states_for([a["asset_id"] for a in assets])
     image_assets = [asset for asset in assets if _asset_media_kind(asset) == "image"]
     video_assets = [asset for asset in assets if _asset_media_kind(asset) == "video"]
     body_blocks = _readable_body_blocks(base_path, card)
@@ -185,8 +188,8 @@ def read_card_preview_detail(base_dir: Path | str, card_id: str) -> PreviewDetai
         },
         "body_blocks": [_project_body_block(block) for block in body_blocks],
         "comment_blocks": [_project_body_block(block) for block in comment_blocks],
-        "image_assets": [_project_asset(asset) for asset in image_assets],
-        "video_assets": [_project_asset(asset) for asset in video_assets],
+        "image_assets": [_project_asset(asset, states.get(asset["asset_id"])) for asset in image_assets],
+        "video_assets": [_project_asset(asset, states.get(asset["asset_id"])) for asset in video_assets],
         "media_gap": _project_media_gap(base_path, card_id),
         "missing_reasons": card["missing_reasons"],
         "evaluation": project_preview_evaluation(
@@ -278,18 +281,25 @@ def _asset_media_kind(asset: AssetMediaRow) -> str | None:
     return None
 
 
+_DELIVERABLE_STATUSES = frozenset({"done", "downloaded", "enriched", "preserved", "ready", "understood"})
+
+
+def _recorded_deliverable_assets(assets: Sequence[_Asset]) -> list[_Asset]:
+    return [a for a in assets if a["cleanup_state"] == "present" and a["status"] in _DELIVERABLE_STATUSES and a["local_path"]]
+
+
+def thumbnail_url(asset_id: str, content_hash: str | None,
+                  thumbnail_status: str | None, thumbnail_hash: str | None) -> str | None:
+    if thumbnail_status != "ready" or thumbnail_hash != content_hash:
+        return None
+    return "/api/card-preview/assets/" + quote(asset_id, safe="") + "/thumbnail"
+
+
 def _deliverable_assets(base_dir: Path, assets: Sequence[_Asset]) -> list[_Asset]:
     assets_root = (resolve_data_dir(base_dir) / "assets").resolve()
     result = []
-    for asset in assets:
-        if asset["cleanup_state"] != "present":
-            continue
-        if asset["status"] not in {"done", "downloaded", "enriched", "preserved", "ready", "understood"}:
-            continue
-        local_path = asset["local_path"]
-        if not local_path:
-            continue
-        target = (assets_root / local_path).resolve()
+    for asset in _recorded_deliverable_assets(assets):
+        target = (assets_root / cast(str, asset["local_path"])).resolve()
         try:
             target.relative_to(assets_root)
         except ValueError:
@@ -299,7 +309,7 @@ def _deliverable_assets(base_dir: Path, assets: Sequence[_Asset]) -> list[_Asset
     return result
 
 
-def _project_asset(asset: CardAssetRow) -> PreviewAsset:
+def _project_asset(asset: CardAssetRow, thumbnail: CardAssetThumbnailRow | None) -> PreviewAsset:
     asset_id = asset["asset_id"]
     return {
         "asset_id": asset_id,
@@ -314,4 +324,7 @@ def _project_asset(asset: CardAssetRow) -> PreviewAsset:
         "status": asset["status"],
         "cleanup_state": asset["cleanup_state"],
         "asset_url": "/api/card-preview/assets/" + quote(asset_id, safe=""),
+        "thumbnail_url": thumbnail_url(asset_id, asset["content_hash"],
+                                       thumbnail["status"] if thumbnail else None,
+                                       thumbnail["source_content_hash"] if thumbnail else None),
     }

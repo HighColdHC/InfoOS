@@ -86,17 +86,18 @@ export function CardFeedItem({
 }
 
 function FeedCover({ item }: { item: CardPreviewListItem }) {
+  const thumbnail = item.cover_thumbnail_url;
   const extra = (item.media_count || 0) - 1;
   return (
     <div className="card-feed-item__cover" data-kind={item.cover_kind ?? "image"}>
-      {item.cover_kind === "video" ? (
-        <>
-          <video src={item.cover_asset_url ?? undefined} muted playsInline preload="metadata" aria-hidden="true" />
-          <Play className="card-feed-item__play" size={18} fill="currentColor" aria-label="视频" />
-        </>
+      {thumbnail ? (
+        <img src={thumbnail} loading="lazy" decoding="async" alt="" />
+      ) : item.cover_kind === "video" ? (
+        <video src={item.cover_asset_url ?? undefined} muted playsInline preload="metadata" aria-hidden="true" />
       ) : (
         <img src={item.cover_asset_url ?? undefined} loading="lazy" alt="" />
       )}
+      {item.cover_kind === "video" ? <Play className="card-feed-item__play" size={18} fill="currentColor" aria-label="视频" /> : null}
       {extra > 0 ? <span>+{extra}</span> : null}
     </div>
   );

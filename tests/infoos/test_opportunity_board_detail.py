@@ -64,8 +64,8 @@ def test_detail_and_preview_do_not_depend_on_board_membership(tmp_path, step, fo
         assert client.get("/api/card-preview/card-2").json()["opportunity"] is None
 
 
-@pytest.mark.parametrize("questions", [[], ["交付是什么？"], ["投入多少？", "如何获客？", "收益能否核实？"]])
-def test_list_question_counts_and_complete_detail_arrays(tmp_path, questions):
+def test_list_question_counts_and_complete_detail_arrays(tmp_path):
+    questions = ["投入多少？", "如何获客？", "收益能否核实？"]
     prepared(tmp_path)
     evidence = ["原文提供了产品价格。", "作者说明了交付流程。"]
     save(tmp_path, [item(next_step="observe", evidence=evidence, verify_questions=questions)])

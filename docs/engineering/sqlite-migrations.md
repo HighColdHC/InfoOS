@@ -2,6 +2,14 @@
 
 B1 起，`backend/infrastructure/storage/migrations/` 是 SQLite 结构与历史回填的迁移来源。已发布的 `v0001_core.sql`、`v0001_collector.sql` 和各编号迁移不可改写；旧的 `storage/schema.sql` 与 `storage/schema_collector.sql` 已由冻结基线取代。CRUD 与事务规则仍见 `sqlite-crud-playbook.md`。
 
+## v0025：附件缩略图
+
+`v0025_card_asset_thumbnails.sql` 新增 `card_asset_thumbnails`，以 `asset_id` 为主键，外键关联 `card_assets(asset_id)` 并在附件行删除时级联删除。状态限定为 `ready` / `failed`：ready 必须有路径、宽高和字节数且无错误码；failed 必须有错误码且路径、宽高和字节数为空。保存源内容哈希和创建、更新时间；固定 MIME 为 `image/webp`。
+
+缩略图是可删除重建的派生数据，不是 CardAsset。文件位于 `<data>/assets/_thumbnails/<h[:2]>/<h>.webp`，其中 `h` 为 asset_id 的 SHA-256；普通文件随现有附件备份纳入，删除附件时由清理入口显式删除文件。新增一棵主键 B-tree，无额外索引；写入缩略图状态会维护该树。
+
+迁移只建表，不回填；存量附件由 `python -m backend.workers.asset_thumbnails --preview` 预览，再用 `--apply` 维护命令回填，可限制数量并显式重试失败项。发布使用 `--update-kind data-migration`，先在一致性备份副本上预演；旧镜像不能打开 v25 数据卷。
+
 ## v0024：机会候选标记侧表
 
 `v0024_candidate_flags.sql` 新增 `raw_item_candidate_flags`，以原料 `(connector_id, raw_item_id)` 为复合主键、`WITHOUT ROWID` 保存 `prefilter_candidate` 与 `wind_vane_tagged` 两个非空 0/1 标记，外键指向 `raw_items` 并级联删除。SQL 模板由同名 Python 迁移模块展开，回填与两个触发器复用该模块冻结的 v23 JSON 判定常量，不复制判定规则。

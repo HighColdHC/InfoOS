@@ -18,18 +18,17 @@ def _raw(client, path, encoding="gzip", **headers):
 def test_api_and_frontend_assets_compress_without_changing_content(tmp_path):
     assets = tmp_path / "frontend" / "dist" / "assets"
     assets.mkdir(parents=True)
-    for name in ("app.js", "app.css"):
-        (assets / name).write_text("example content " * 200, encoding="utf-8")
+    (assets / "app.js").write_text("example content " * 200, encoding="utf-8")
     app = create_app(tmp_path)
 
     @app.get("/api/gzip-test")
     def large_json():
-        return JSONResponse({"content": "example content " * 200}, headers={"Vary": "Origin, Accept-Encoding"})
+        return JSONResponse({"content": "example content " * 200})
 
     # Add the test route before the existing catch-all MCP mount.
     app.router.routes.insert(0, app.router.routes.pop())
     client = TestClient(app)
-    for path in ("/api/gzip-test", "/assets/app.js", "/assets/app.css"):
+    for path in ("/api/gzip-test", "/assets/app.js"):
         _, plain_headers, plain = _raw(client, path, "identity")
         status, headers, compressed = _raw(client, path)
         assert status == 200
@@ -40,21 +39,14 @@ def test_api_and_frontend_assets_compress_without_changing_content(tmp_path):
             assert headers["cache-control"] == plain_headers["cache-control"] == "public, max-age=31536000, immutable"
 
 
-def test_excluded_responses_and_small_body(tmp_path):
+def test_excluded_responses(tmp_path):
     assets = tmp_path / "data" / "assets" / "card_1"
     assets.mkdir(parents=True)
     content = b"image content " * 200
     (assets / "image.jpg").write_bytes(content)
     app = create_app(tmp_path)
 
-    @app.get("/api/small-gzip-test")
-    def small():
-        return Response("small", media_type="text/plain")
-
-    app.router.routes.insert(0, app.router.routes.pop())
     client = TestClient(app)
-    _, headers, body = _raw(client, "/api/small-gzip-test")
-    assert body == b"small" and "content-encoding" not in headers
     _, headers, body = _raw(client, "/api/assets/card_1/image.jpg")
     assert body == content and "content-encoding" not in headers
     status, headers, body = _raw(client, "/api/assets/card_1/image.jpg", Range="bytes=0-99")

@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from backend.infrastructure.security.redaction import redact_text
+
 
 @dataclass(frozen=True)
 class CookieRule:
@@ -109,12 +111,12 @@ def check_cookie_login(platform: str, profile_dir: str | Path | None) -> dict[st
                     "login_url": rule.login_url,
                     "method": "cookie",
                 }
-        except sqlite3.Error:
+        except sqlite3.Error as exc:
             return {
                 "platform": platform,
                 "checked": True,
                 "status": "failed",
-                "error": "无法读取专用浏览器的登录状态",
+                "error": "无法读取专用浏览器的登录状态：" + redact_text(str(exc)),
                 "error_code": "cookie_database_unreadable",
                 "login_url": rule.login_url,
                 "method": "cookie",

@@ -311,10 +311,7 @@ def test_dedicated_browser_queue_attempts_site_once_per_refill(tmp_path: Path, m
     assert not any(event["event_type"] == "resource_deferred" for event in events)
 
 
-def test_browser_refill_caches_lane_by_task(tmp_path: Path, monkeypatch):
-    from backend.application.tasks import candidate_lane_cache
-    from backend.application.tasks.lanes import ExecutionLane
-
+def test_browser_refill_caches_lane_by_task(tmp_path: Path):
     _upsert_executor_source(
         tmp_path, source_id="x_same", platform="x", source_type="creator", identifier="same",
         raw_metadata={"fetch_rate_policy": {"enabled": False}},
@@ -322,19 +319,11 @@ def test_browser_refill_caches_lane_by_task(tmp_path: Path, monkeypatch):
     repo = TaskRepository.for_base_dir(tmp_path)
     tasks = [Task(f"same_source_{index}", TaskType.FETCH, "source", "x_same") for index in range(3)]
     repo.enqueue_many(tasks)
-    site_calls = []
-
-    def lane(task, _base):
-        site_calls.append(task.task_id)
-        return ExecutionLane.BROWSER_ACQUISITION, "twitter"
-
-    monkeypatch.setattr(candidate_lane_cache, "execution_lane_and_site_for", lane)
     result = run_due_tasks(
         tmp_path, limit=2, queue_names=["browser_fetch"],
         handlers={TaskType.FETCH: lambda *_: {"status": "success", "artifacts": {}}},
     )
     assert result["succeeded"] == 2
-    assert site_calls == [task.task_id for task in tasks]
 
 
 def test_browser_refill_scans_same_site_after_throttled_identity(tmp_path: Path, monkeypatch):

@@ -18,6 +18,7 @@ from backend.application.tasks.repository import TaskRepository
 from backend.application.tasks.types import Task, TaskType
 from backend.infrastructure.storage.database import default_database_path, ensure_database_initialized
 from backend.infrastructure.storage.paths import resolve_data_dir
+from backend.infrastructure.media.thumbnails import thumbnail_relative_path
 from backend.infrastructure.storage.x_media_cleanup import XMediaCleanupStore
 
 
@@ -116,6 +117,11 @@ def apply_cleanup(
         except OSError:
             pass
         raise
+
+    assets_root = resolve_data_dir(base_path) / "assets"
+    for card in frozen_plan["affected_cards"]:
+        for asset in card["assets"]:
+            (assets_root / thumbnail_relative_path(str(asset["asset_id"]))).unlink(missing_ok=True)
 
     manifest.update(status="applied", applied_at=occurred_at, task_ids=task_ids, mutations=mutations)
     _write_manifest(manifest_path, manifest)

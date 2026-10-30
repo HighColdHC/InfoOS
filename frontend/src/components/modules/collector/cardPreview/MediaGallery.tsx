@@ -30,7 +30,9 @@ export function MediaGallery({ assets, variant = "detail", onPreview }: Props) {
             onClick={() => onPreview(assets, index)}
             aria-label={`预览${isVideo ? "视频" : "图片"} ${asset.asset_id}`}
           >
-            {isVideo ? (
+            {asset.thumbnail_url ? (
+              <img src={asset.thumbnail_url} alt="" loading="lazy" decoding="async" />
+            ) : isVideo ? (
               <video src={asset.asset_url} muted playsInline preload="metadata" aria-hidden="true" />
             ) : (
               <img src={asset.asset_url} alt="" loading="lazy" />

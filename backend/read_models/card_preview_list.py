@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from pathlib import Path
 import json
 import re
 from typing import cast
@@ -14,7 +13,7 @@ from backend.domain.card_titles import display_title
 from backend.domain.sources.zsxq_digest import card_is_digest
 from backend.domain.timestamps import normalize_timestamp
 from backend.read_models.cards import platform_display_label
-from backend.read_models.card_preview import _asset_media_kind, _deliverable_assets, _is_generic_platform_page_block
+from backend.read_models.card_preview import _asset_media_kind, _recorded_deliverable_assets, _is_generic_platform_page_block, thumbnail_url
 
 from backend.infrastructure.storage.cards_types import CardRow
 from backend.infrastructure.storage.card_preview_query_types import (
@@ -72,7 +71,7 @@ def project_preview_evaluation(row: PreviewEvaluationRow | CardEvaluationRow | N
 
 
 def project_preview_items(
-    base_dir: Path, cards: list[CardRow], blocks: list[PreviewBlockRow], assets: list[PreviewAssetRow],
+    cards: list[CardRow], blocks: list[PreviewBlockRow], assets: list[PreviewAssetRow],
     sources: list[PreviewSourceRow],
     evaluations: list[PreviewEvaluationRow],
     opportunities: dict[str, PreviewOpportunity],
@@ -108,7 +107,7 @@ def project_preview_items(
                     payload = {}
                 if isinstance(payload, dict) and payload.get("purpose") in (None, "", "ai_interpretation"):
                     summaries.append(body)
-        deliverable = _deliverable_assets(base_dir, assets_by_card[card_id])
+        deliverable = _recorded_deliverable_assets(assets_by_card[card_id])
         images = [asset for asset in deliverable if _asset_media_kind(asset) == "image"]
         videos = [asset for asset in deliverable if _asset_media_kind(asset) == "video"]
         media = images + videos
@@ -130,6 +129,8 @@ def project_preview_items(
             "excerpt": _excerpt("\n".join(originals) if originals else card["content"], card["title"], 280),
             "summary_excerpt": _compact("\n".join(summaries), 280),
             "cover_asset_url": "/api/card-preview/assets/" + quote(media[0]["asset_id"], safe="") if media else None,
+            "cover_thumbnail_url": thumbnail_url(media[0]["asset_id"], media[0]["content_hash"],
+                                                  media[0]["thumbnail_status"], media[0]["thumbnail_hash"]) if media else None,
             "cover_kind": _asset_media_kind(media[0]) if media else None,
             "media_count": len(media),
             "evaluation": evaluations_by_card.get(card_id),

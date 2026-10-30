@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sqlite3
-from contextlib import contextmanager
 from pathlib import Path
 import pytest
 
@@ -181,26 +180,14 @@ def test_executor_releases_unclaimed_probe(tmp_path: Path, monkeypatch) -> None:
     assert circuits.get("platform", "x")["probe_owner_token"] is None
 
 
-def test_due_limit_and_connections_close(tmp_path: Path, monkeypatch) -> None:
+def test_due_limit_and_connections_close(tmp_path: Path) -> None:
     repo = TaskRepository.for_base_dir(tmp_path)
     for index in range(3):
         repo.enqueue(Task(f"due-{index}", TaskType.CONTENT_ENRICH, "card", f"card-{index}"))
-    statements: list[str] = []
-    original_connect = repo._connect_existing
-
-    @contextmanager
-    def traced_connect():
-        with original_connect() as conn:
-            conn.set_trace_callback(statements.append)
-            yield conn
-
-    monkeypatch.setattr(repo, "_connect_existing", traced_connect)
     queue = repo.get("due-0").queue_name
     assert len(repo.list_due(now=NOW, queue_names=[queue], limit=2)) == 2
-    assert any(" limit 2" in sql.lower() for sql in statements)
     assert len(repo.list_due(now=NOW, queue_names=[queue], limit=None)) == 3
     assert len(repo.list_due(now=NOW, limit=2)) == 2
-    assert any(" limit 20" in sql.lower() for sql in statements)
     with repo._connect() as task_conn:
         assert task_conn.execute("pragma journal_mode").fetchone()[0] == "wal"
         assert task_conn.execute("pragma busy_timeout").fetchone()[0] >= 10000

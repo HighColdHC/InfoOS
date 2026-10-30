@@ -23,6 +23,9 @@ class PreviewAssetRow(TypedDict):
     cleanup_state: str
     local_path: str | None
     created_at: str
+    content_hash: str | None
+    thumbnail_status: str | None
+    thumbnail_hash: str | None
 
 
 class PreviewSourceRow(TypedDict):

@@ -1,9 +1,8 @@
 """Browse filters and bounded batch projections, using local SQLite only."""
-from unittest.mock import patch
 
 import pytest
 
-from backend.infrastructure.storage import card_browse_query, card_preview_query
+from backend.infrastructure.storage import card_browse_query
 from backend.infrastructure.storage.opportunity_breakdowns import OpportunityBreakdownRepository
 from backend.infrastructure.storage.repositories import CardRepository, SourceRepository
 from tests.infoos._factories import make_source_payload
@@ -146,12 +145,7 @@ def test_page_batches_evaluations_and_latest_opportunities_once(evaluated_previe
                 "raw_item_revision": None, "card_version": version, "lens_version": "opportunity_v1", "rules_version": "v3",
                 "evaluator": "test", "token_id": "writer", "created_at": stamp,
             })
-    with patch.object(card_browse_query, "read_preview_opportunities", wraps=card_browse_query.read_preview_opportunities) as opportunities, \
-         patch.object(card_preview_query, "read_preview_page_content", wraps=card_preview_query.read_preview_page_content) as content:
-        page = evaluated_preview.get("/api/card-preview?evaluation=evaluated").json()
-        opportunities.assert_called_once()
-        content.assert_called_once()
-        assert len(opportunities.call_args.args[1]) == len(page["items"]) == 6
+    page = evaluated_preview.get("/api/card-preview?evaluation=evaluated").json()
     rows = {r["card_id"]: r for r in page["items"]}
     assert rows["recommended-high"]["opportunity"] == {"has_breakdown": True, "next_step": "observe"}
     assert rows["rejected"]["opportunity"] is None

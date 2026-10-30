@@ -63,7 +63,12 @@ def drop_v15_schema(conn: sqlite3.Connection) -> None:
             conn.execute(f'alter table cards drop column {column}')
 
 
+def drop_v25_schema(conn: sqlite3.Connection) -> None:
+    conn.execute("drop table if exists card_asset_thumbnails")
+
+
 def drop_v24_schema(conn: sqlite3.Connection) -> None:
+    drop_v25_schema(conn)
     from backend.infrastructure.storage.migrations.v0024_candidate_flags import TRIGGERS
     for name in TRIGGERS:
         conn.execute(f'drop trigger if exists {name}')

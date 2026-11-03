@@ -11,7 +11,7 @@ from backend.infrastructure.runtime.webauth import gateway_authorized
 router = APIRouter(tags=["reader-auth"])
 _READER_PATH = re.compile(
     r"(?:/favicon\.ico|/r/.*|/assets/.+|/api/card-preview|/api/card-preview/[^/]+|"
-    r"/api/opportunities/(?:board|stats|[^/]+)|/api/card-preview/assets/[^/]+|/api/card-preview/assets/[^/]+/thumbnail|/api/intelligence/(?:daily-brief/[^/]+|knowledge(?:/[^/]+)?))"
+    r"/api/opportunities/(?:board|stats)|/api/card-preview/assets/[^/]+|/api/card-preview/assets/[^/]+/thumbnail|/api/intelligence/(?:daily-brief/[^/]+|knowledge(?:/[^/]+)?))"
 )
 
 
@@ -25,7 +25,7 @@ def is_reader_request(uri: str, method: str) -> bool:
     if any(part in {".", ".."} for part in path.split("/")):
         return False
     if method == "PUT":
-        return re.fullmatch(r"/api/opportunities/[^/]+/follow-up", path) is not None
+        return re.fullmatch(r"/api/opportunities/[^/]+/research-status", path) is not None
     return _READER_PATH.fullmatch(path) is not None
 
 

@@ -75,8 +75,8 @@ Source / system-managed capture source
 - 商机卡采用宽口径：具体卖什么、卖给谁，加收入、价格、销量、接单、成交或在投广告之一；只写“商务合作”的简介不算赚钱信号。外部 agent 不判 verify，只拆解并按信号强度排序。
 - 生财精华与风向标是确定性渠道，依次尝试项目、商机、方法。抖音与小红书规则初筛只是输入证据；其他来源先分诊。
 - 归并前检索同类型卡。商机按客户、要约、收费方式相同归并，追加原卡证据；新进展用 update，矛盾用 conflict，保留说明。
-- 商机卡初始 `research_status=pending`；交互式 agent 依据用户调研决定写 `researching`、`project`、`observe` 或 `drop`，只追加状态事件。定时 agent 不替用户选择去向。
-- 一期上线后由 Claude 经用户确认停用旧商机任务，旧看板 `/r/opportunities` 继续可读；旧拆解、核实与跟进表保留，不迁移或改变语义，二期看板改读商机卡。
+- 商机卡初始 `research_status=pending`；用户可在看板或知识卡详情修改状态，也可在对话中让交互式 agent 按用户决定修改。状态变化追加事件，同状态不写事件；定时 agent 不替用户选择去向。
+- 旧商机看板能力与旧商机 MCP 工具下线；`/r/opportunities` 改读商机知识卡。旧拆解、核实、跟进及候选标记表保留，不做数据库迁移；历史拆解仍可在信息卡阅读。
 - 站外接触由用户本人完成，不保存联系方式或聊天全文，不代用户入群、私信、评论或点赞。
 
 ## 4. 处理链
@@ -109,11 +109,11 @@ agent 写回（MCP submit_evaluations）-> 写入评估与评估 block -> CARD_F
 
 管理面（运维使用，局域网表单登录或公网 Authelia 双因素后可用）：卡片、来源、任务、采集环境、Token、账号与安全、日志；导出功能与日志合并在同一工作区。
 
-阅读面（用户使用，可以通过公网认证网关访问）：信息卡 `/r/card/{card_id}`、知识卡 `/r/knowledge/{knowledge_id}`、日报 `/r/brief/{date}` 与漫步 `/r/browse`，不带管理导航；当前没有单事件阅读页。
+阅读面（用户使用，可以通过公网认证网关访问）：信息卡 `/r/card/{card_id}`、知识库 `/r/knowledge`、知识卡 `/r/knowledge/{knowledge_id}`、日报 `/r/brief/{date}`、漫步 `/r/browse`、商机看板 `/r/opportunities` 与统计 `/r/opportunities/stats`，不带管理导航；当前没有单事件阅读页。
 
-商机跟进看板 `/r/opportunities` 与统计页 `/r/opportunities/stats`：展示从 agent 推荐、跟进、核实到转入行动的进度与漏斗。**看板跟进状态是阅读面唯一的写入**，仅 `PUT /api/opportunities/{card_id}/follow-up`，经过阅读鉴权与同源变更检查；核实记录仍由 agent 写入，行动发生在 PKM。
+商机看板按知识卡调研状态分为待调研、调研中、已立项、继续观察、放弃五列，支持搜索、子类型和来源平台筛选；待调研按信号强度排序，其余列按最近状态事件排序。统计页展示调研状态、子类型、赚钱信号类型、每日新增及来源平台分布。看板拖动及知识卡详情修改状态共用阅读面唯一写接口 `PUT /api/opportunities/{knowledge_id}/research-status`，经过阅读鉴权与同源变更检查；行动发生在 PKM。
 
-知识库 `/r/knowledge`：按类型、子类型、商机调研状态与关键词浏览知识卡，只读。
+知识库 `/r/knowledge`：按类型、子类型、商机调研状态与关键词浏览知识卡；商机卡详情可修改调研状态。
 
 漫步浏览：按来源或平台浏览已评估的卡片，可见分数与评估理由，低分卡沉底但可见。不做已读状态、个性化首页或推送，不与原生平台的信息流竞争。
 
@@ -145,7 +145,7 @@ agent 写回（MCP submit_evaluations）-> 写入评估与评估 block -> CARD_F
 | 读 | `intelligence:read` | 读卡、检索、新卡、日报、画像、评分标准、来源体检 | 已上线 |
 | 写回 | `profile:write`、`evaluation:write` | 推送画像、写回分诊与知识卡拆解 | 已实现；定时 agent 仅授予所需权限 |
 | 采集 | `collect:write` | 发起注册表声明的按需调研、提交链接捕获、读取同 Token 的捕获回执 | 只走 durable queue、熔断与资源调度，不改常驻配置；设单日次数上限。调研进度 `get_research_run` 要求 `intelligence:read` |
-| 交互专属 | `sources:write`、`verification:write` | 新增、修改、启停来源；知识商机卡 `set_research_status`，以及保留的 `submit_verification`、`set_opportunity_follow_up` | 只给交互式 agent，定时 Token 不授予；Token 隔离限制能力，具体变更仍须依据用户确认。改动留审计，来源停用不删除数据 |
+| 交互专属 | `sources:write`、`verification:write` | 新增、修改、启停来源；知识商机卡 `set_research_status` | 只给交互式 agent，定时 Token 不授予；Token 隔离限制能力，具体变更仍须依据用户确认。改动留审计，来源停用不删除数据 |
 | 不开放 | — | Token 管理、浏览器环境与登录态、部署、导出 | 通过已登录管理面操作；部署仍走运维流程 |
 
 完整 MCP 工具清单见 [agent 安装指南](../INSTALL-for-agents.md#5-mcp-工具与权限)。`captures:write` 属于 `/api/capture/v1/`，`cards:read` / `assets:read` 属于插件读取接口，与 MCP scope 分开。`feedback:write` 虽在 Token 允许集合中，当前无对应 MCP 工具。

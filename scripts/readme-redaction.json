@@ -36,8 +36,6 @@
     ".collector-task-trace blockquote",
     ".collector-log-table tbody td:nth-child(4)",
     ".collector-log-table tbody td:nth-child(5)",
-    ".opportunity-source strong",
-    ".opportunity-source__meta > span:first-child",
     ".tile h3",
     ".tile__next",
     ".collector-token-table tbody td:first-child",
@@ -62,8 +60,6 @@
     ".collector-task-item-toggle small",
     ".collector-card-detail__facts code",
     ".knowledge-reader__fields dd",
-    ".opportunity-source__meta",
-    ".opportunities-stats tbody td:first-child",
     ".knowledge-reader__evidence blockquote",
     ".collector-log-table td code",
     ".collector-environment-circuit__head strong"
@@ -138,7 +134,12 @@
     ".browse-reader__card-meta > span:nth-of-type(3)",
     ".knowledge-reader__evidence > p:first-of-type",
     ".collector-token-overview small",
-    ".collector-environment-component"
+    ".collector-environment-component",
+    ".opportunities .col__head",
+    ".opportunities .tile__top",
+    ".opportunities .tile__foot",
+    ".opportunities-stats .block",
+    ".opportunities-stats > p"
   ],
   "preserve_literals": [
     "X",
@@ -392,7 +393,6 @@
     ".card-reader__meta > span",
     ".card-source-stat__name",
     ".lan-account > p strong",
-    ".opportunity-source__meta > span:first-child",
     ".collector-source-run-table tbody td:first-child strong",
     ".collector-task-trace-overview > div:nth-child(3) b",
     ".brief-reader__item-body > p:nth-of-type(3)",
@@ -426,5 +426,16 @@
     ".collector-card-detail__facts code",
     ".collector-task-trace code",
     "td[data-label='稳定标识']"
-  ]
+  ],
+  "field_selectors": {
+    ".opportunities .tile h3": "heading",
+    ".opportunities .tile__next": "body"
+  },
+  "preserve_attribute_selectors": [
+    ".opportunities-stats .bars [title]"
+  ],
+  "attribute_field_selectors": {
+    ".opportunities .tile[aria-label]": "heading",
+    ".opportunities .tile select[aria-label]": "heading"
+  }
 }

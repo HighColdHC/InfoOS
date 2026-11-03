@@ -10,6 +10,7 @@ from backend.domain.timestamps import normalize_timestamp, parse_utc
 
 EXTRACTION_VERSION = "knowledge_v1"
 RESEARCH_STATUSES = ("pending", "researching", "project", "observe", "drop")
+RESEARCH_LABELS = {"pending": "待调研", "researching": "调研中", "project": "已立项", "observe": "继续观察", "drop": "放弃"}
 CONFUSIONS = """项目讲谁做成什么、重结果；方法讲怎么做、重步骤，一篇复盘通常都拆。
 项目是具体实例，商机是生意结构与赚钱信号；有收入的复盘两种都出，广告只出商机。
 产品是持续运营、有名字/官网/价格的工具服务；资源是一次能拿走的资料。

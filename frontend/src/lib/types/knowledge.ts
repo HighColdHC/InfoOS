@@ -34,5 +34,5 @@ export const KNOWLEDGE_LABELS: Record<string, string> = {
   project: "项目", opportunity: "商机", method: "方法", product: "产品", resource: "资源", topic: "选题", news: "资讯",
 };
 export const RESEARCH_LABELS: Record<string, string> = {
-  pending: "待调研", researching: "用户调研", project: "立项", observe: "继续观察", drop: "放弃",
+  pending: "待调研", researching: "调研中", project: "已立项", observe: "继续观察", drop: "放弃",
 };

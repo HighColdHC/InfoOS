@@ -18,7 +18,7 @@ B1 起，`backend/infrastructure/storage/migrations/` 是 SQLite 结构与历史
 
 触发器使用显式 `ON CONFLICT (connector_id, raw_item_id) DO UPDATE`，兼容原料仓库已有的 UPSERT 更新路径；不使用会被外层冲突策略覆盖的 `INSERT OR REPLACE`。
 
-候选分页、统计、看板、列表、详情上下文与 watchdog 从侧表按主键点查。顶层 `prefilter` 优先于 `raw_metadata.prefilter`（包括顶层 JSON null）、风向标标签的文本子串判定和候选优先级保持不变；平台与 `source_type` 仍从 `sources` 实时读取，case 候选仍取每卡最新评估。分页证据摘要仍只为返回行读取原 JSON。返回字段、顺序、筛选与候选语义不变；已有拆解在缺少关联原料时仍保留在列表中。
+候选分页、统计、看板、列表与详情上下文从侧表按主键点查。顶层 `prefilter` 优先于 `raw_metadata.prefilter`（包括顶层 JSON null）、风向标标签的文本子串判定和候选优先级保持不变；平台与 `source_type` 仍从 `sources` 实时读取，case 候选仍取每卡最新评估。分页证据摘要仍只为返回行读取原 JSON。返回字段、顺序、筛选与候选语义不变；已有拆解在缺少关联原料时仍保留在列表中。
 
 每次原料插入或 payload 更新多解析一次 JSON 并维护一行侧表及其主键 B-tree；删除原料时级联删除侧表行。首次回填需要扫描原料 JSON，持有写锁并增加侧表及 WAL 空间，应预留部署窗口与可验证恢复点。发布须使用 `--update-kind data-migration`，先在一致性备份副本上预演并记录耗时，再验收真实数据的完整输出与性能；旧镜像不能直接打开 v24 数据卷，回退使用部署恢复点。
 

@@ -1,29 +1,26 @@
 import type { CSSProperties } from "react";
-import type { OpportunityItem, Stage } from "../../../lib/types/opportunities";
-import { OpportunitySource } from "./OpportunitySource";
-import { dateText } from "./shared";
+import type { BoardColumn, OpportunityItem, ResearchStatus } from "../../../lib/types/opportunities";
+import { platformLabel } from "../../../lib/platforms";
+import { dateText, SUBTYPES } from "./shared";
 
-export function OpportunityTile({ item, busy, onOpen, onMove, onDrag }: {
-  item: OpportunityItem; busy: boolean; onOpen: () => void; onMove: (stage: Stage) => void; onDrag: (id: string | null) => void;
+export function OpportunityTile({ item, columns, busy, onMove, onDrag }: {
+  item: OpportunityItem; columns: BoardColumn[]; busy: boolean;
+  onMove: (status: ResearchStatus) => void; onDrag: (id: string | null) => void;
 }) {
-  const verification = item.latest_verification;
-  const hint = item.stage === "inbox" ? `${item.question_count} 个问题待核实` : item.stage === "plan" ? "联系对方，问清交付与价格"
-    : item.stage === "contact" ? (verification !== null && verification.doubts !== null ? verification.doubts : "持续观察，补充核实")
-    : item.stage === "archive" ? (item.archive_reason === "dropped" ? "接触后放弃" : "暂不跟进，可随时恢复") : "已转入 PKM 行动";
-  return <article className={`tile${item.stale ? " is-stale" : ""}`} style={{ "--stage": `var(--c-${item.stage})` } as CSSProperties}
-    tabIndex={0} aria-label={item.offer} draggable={!busy} onClick={onOpen} onKeyDown={event => { if (event.key === "Enter") onOpen(); }}
-    onDragStart={event => { event.dataTransfer.setData("text/plain", item.card_id); onDrag(item.card_id); event.currentTarget.classList.add("is-dragging"); }}
+  return <article className="tile" style={{ "--stage": `var(--c-${item.research_status})` } as CSSProperties}
+    aria-label={item.title} draggable={!busy} tabIndex={0}
+    onClick={() => window.location.assign(`/r/knowledge/${encodeURIComponent(item.knowledge_id)}`)}
+    onKeyDown={event => { if (event.key === "Enter" && event.target === event.currentTarget) window.location.assign(`/r/knowledge/${encodeURIComponent(item.knowledge_id)}`); }}
+    onDragStart={event => { event.dataTransfer.setData("text/plain", item.knowledge_id); onDrag(item.knowledge_id); event.currentTarget.classList.add("is-dragging"); }}
     onDragEnd={event => { onDrag(null); event.currentTarget.classList.remove("is-dragging"); }}>
-    <div className="tile__top">{item.stage === "inbox" && Date.now() - Date.parse(item.created_at) < 86400000 ? <span className="chip chip--new">新</span> : null}
-      <span className="chip chip--model">{item.model_label}</span>{item.stale ? <span className="chip chip--warn">待处理</span> : null}
-      {item.candidate_kind === "case" ? <span className="chip chip--model">案例</span> : null}
-      {item.risk_labels.map(risk => <span className="chip chip--warn" key={risk}>{risk}</span>)}
-      </div>
-    <OpportunitySource source={item} />
-    <h3>{item.offer}</h3><p className="tile__next"><b>下一步：</b>{hint}</p>
-    {item.stage === "inbox" ? <time className="tile__updated" dateTime={item.stage_since}>{dateText(item.stage_since)}</time> : null}
-    <div className="tile__foot"><span className="tile__scores">复制 {item.replicability} · 可信 {item.credibility}</span>
-    {item.stage === "inbox" ? <span className="tile__actions"><button className="btn btn--ghost" disabled={busy} onClick={event => { event.stopPropagation(); onMove("archive"); }}>暂不</button>
-      <button className="btn btn--primary" disabled={busy} onClick={event => { event.stopPropagation(); onMove("plan"); }}>跟进</button></span> : <time dateTime={item.stage_since}>{dateText(item.stage_since)}</time>}</div>
+    <div className="tile__top"><span className="chip chip--model">{SUBTYPES[item.subtype]}</span><span>强度 {item.strength}</span></div>
+    <h3><a href={`/r/knowledge/${encodeURIComponent(item.knowledge_id)}`}>{item.title}</a></h3>
+    <p className="tile__next">{item.money_signal}</p>
+    <div className="tile__top"><span>证据 {item.evidence_count}</span>{item.platforms.map(platform => <span key={platform}>{platformLabel(platform)}</span>)}</div>
+    <div className="tile__foot"><time dateTime={item.status_changed_at}>{dateText(item.status_changed_at)}</time>
+      <select onClick={event => event.stopPropagation()} aria-label={`${item.title}的调研状态`} value={item.research_status} disabled={busy}
+        onChange={event => onMove(event.target.value as ResearchStatus)}>
+        {columns.map(column => <option key={column.status} value={column.status}>{column.label}</option>)}
+      </select></div>
   </article>;
 }

@@ -11,3 +11,8 @@
 .knowledge-reader .brief-reader__item { grid-template-columns: minmax(0, 1fr); }
 .knowledge-reader__section-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; }
 .knowledge-reader__section-heading > a { font-size: var(--font-size-sm); }
+
+.knowledge-reader__research { display: grid; gap: 12px; margin: 16px 0; }
+.knowledge-reader__research label { display: grid; gap: 6px; }
+.knowledge-reader__research select, .knowledge-reader__research textarea { font: inherit; color: inherit; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 8px; min-width: 0; max-width: 100%; }
+.knowledge-reader__research button { justify-self: start; }

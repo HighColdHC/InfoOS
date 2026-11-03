@@ -10,6 +10,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -56,7 +57,7 @@ def serve(port: int):
     uvicorn.run("backend.app.main:app", host="127.0.0.1", port=port, loop="asyncio", access_log=False)
 
 
-def capture_instance(directory: Path, phase: str):
+def capture_instance(directory: Path, phase: str, only: list[str] | None = None):
     env = {key: value for key, value in os.environ.items()
            if not key.startswith(("INFOOS_", "LARK_", "FEISHU_"))}
     home = directory / phase
@@ -97,7 +98,8 @@ def capture_instance(directory: Path, phase: str):
                 else:
                     raise TimeoutError("Isolated API startup timed out")
             subprocess.run([sys.executable, str(ROOT / "scripts/capture-readme-screenshots.py"),
-                            "--base-url", base_url, "--runtime-dir", str(home), "--phase", phase],
+                            "--base-url", base_url, "--runtime-dir", str(home), "--phase", phase,
+                            *(["--only", *only] if only else [])],
                            cwd=ROOT, check=True)
         finally:
             child.terminate()
@@ -112,6 +114,7 @@ def capture_instance(directory: Path, phase: str):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--snapshot", type=Path)
+    parser.add_argument("--only", nargs="+", choices=["opportunity-board", "opportunity-stats"])
     parser.add_argument("--serve", type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.serve:
@@ -125,15 +128,18 @@ def main():
         parser.error("Snapshot must be inside a disposable /tmp/infoos-shots-* directory; it will be deleted")
     if snapshot.name != "snapshot.sqlite3":
         parser.error("Snapshot must be named snapshot.sqlite3")
+    os.environ.update(TMPDIR=str(directory), SQLITE_TMPDIR=str(directory))
+    tempfile.tempdir = str(directory)
     try:
         if not (ROOT / "frontend/dist/index.html").exists():
-            raise RuntimeError("Build frontend first")
+            raise RuntimeError("Provide matching frontend/dist artifacts first")
         removed = scrub_copy(snapshot)
         print("Local credential tables cleared: " + ", ".join(removed), flush=True)
-        capture_instance(directory, "empty")
-        capture_instance(directory, "live")
+        phases = ("live",) if args.only else ("empty", "live")
+        for phase in phases:
+            capture_instance(directory, phase, args.only)
         summary = {"captures": [json.loads((directory / phase / "capture-report.json").read_text())
-                                for phase in ("empty", "live")],
+                                for phase in phases],
                    "pixel_audit": audit_images(directory / "live/data/infoos.sqlite3", directory, ROOT / "docs/images/features")}
         report_dir = ROOT / ".codex-tmp"
         report_dir.mkdir(exist_ok=True)

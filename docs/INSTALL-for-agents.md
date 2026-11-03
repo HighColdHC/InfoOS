@@ -166,12 +166,11 @@ ssh -N -L 8443:127.0.0.1:8443 linux-host
 | `intelligence:read`：信息与标准 | `get_card`、`get_cards`、`search`、`get_profile`、`get_evaluation_rubric`、`list_new_cards`、`get_daily_brief`、`get_updates_since` |
 | `intelligence:read`：知识卡 | `get_knowledge_schema`、`list_extraction_candidates`、`search_knowledge_cards`、`list_knowledge_cards`、`get_knowledge_card` |
 | `intelligence:read`：来源与采集证据 | `get_source_capabilities`、`list_sources`、`list_source_changes`、`get_source_stats`、`get_collect_capabilities`、`get_research_run` |
-| `intelligence:read`：保留的旧商机接口 | `get_opportunity_lens`、`list_opportunity_candidates`、`list_opportunities`、`list_verifications` |
-| `evaluation:write` | `submit_evaluations`、`submit_knowledge_extractions`、保留的 `submit_opportunity_breakdowns` |
+| `evaluation:write` | `submit_evaluations`、`submit_knowledge_extractions` |
 | `profile:write` | `push_profile` |
 | `collect:write` | `start_research`、`capture_url`、`get_capture`；读研究结果仍需 `intelligence:read` |
 | `sources:write`，交互式 | `create_source`、`update_source`、`set_source_enabled` |
-| `verification:write`，交互式 | `set_research_status`；旧商机的 `submit_verification`、`set_opportunity_follow_up` |
+| `verification:write`，交互式 | `set_research_status` |
 
 权限按工具逐项验证；有有效 Token 仍可能因缺 scope 失败。`feedback:write` 虽在 Token 允许集合中，当前没有注册对应 MCP feedback 工具；事件工具也未注册，不能承诺 agent 能写反馈或读事件。
 
@@ -259,7 +258,7 @@ journalctl --user -u infoos-knowledge.service
 
 用户在 `/r/brief/YYYY-MM-DD` 看冻结日报，在 `/r/knowledge` 按类型、子类型、商机调研状态和关键词浏览知识库；详情 `/r/knowledge/{knowledge_id}` 可追溯原卡 `/r/card/{card_id}` 与摘句。当前启用项目、商机、方法、选题、资讯，产品与资源未启用。低分信息卡不删除，仍可检索。
 
-agent 先 `get_daily_brief`，有需要再 `get_card/get_knowledge_card`，向用户带上深链接。分诊先读 profile/rubric，拆解先读 schema 并检索同类卡，再选择 new/merge/update/conflict；核对归库结果，不凭回执总结成成功。`capture_url` 提交后轮询 `get_capture`；`start_research` 后轮询 `get_research_run`，报告覆盖不足与未知日期。旧商机工具和页面保留兼容，不作为新知识卡安装主链。
+agent 先 `get_daily_brief`，有需要再 `get_card/get_knowledge_card`，向用户带上深链接。分诊先读 profile/rubric，拆解先读 schema 并检索同类卡，再选择 new/merge/update/conflict；核对归库结果，不凭回执总结成成功。`capture_url` 提交后轮询 `get_capture`；`start_research` 后轮询 `get_research_run`，报告覆盖不足与未知日期。商机看板读取知识卡；用户可在看板或详情页设置调研状态，也可在对话中由交互式 agent 按用户决定设置。旧商机工具已下线，历史拆解仍可在信息卡阅读。
 
 公网是可选部署。完整步骤采用 [deploy/edge 手册](../deploy/edge/README.md)及其 [nginx](../deploy/edge/nginx.conf.example)、[Authelia](../deploy/edge/configuration.yml.example)、[公共代理头](../deploy/edge/proxy-common.conf)模板；证书、域名、用户数据库、TOTP、共享密钥与恢复方式都由用户准备。它不是一键安装脚本。启用前校验配置并确认公网边界：
 

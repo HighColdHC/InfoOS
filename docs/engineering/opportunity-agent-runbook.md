@@ -8,6 +8,8 @@ InfoOS 自身不调用 LLM。用户需要自备**付费外部 agent**及其账�
 
 定时 Token **只授予 `intelligence:read`、`evaluation:write`**，不授予采集、来源、画像修改权限。`verification:write` 只给交互式用户调研，用于用户明确决定后的 `set_research_status` 等操作，不能加进定时 Token。用户自行把 Token 放入受保护的文件（0600），默认 `$CONFIG_DIR/mcp-agent.token`；安装器不读取、复制或修改它。不要打印凭据，不使用 `bash -x`。
 
+商机处理沿用分诊和知识卡拆解、归并；定时 agent 不做旧商机核实或跟进。商机卡调研状态由用户在看板或详情页设置，或在对话中由交互式 agent 按用户决定设置。
+
 每轮固定 `since` 和启动时刻 `until`，最多分诊150张、拆解60张。画像和版本从 `get_profile/get_evaluation_rubric/get_knowledge_schema` 获取并固定；归并前检索相似知识卡。达到上限不代表窗口清空，不自动推进 `since`；`--now` 只跳过时刻筛选，不更改窗口、上限和权限。
 
 ## 共用配置

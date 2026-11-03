@@ -1,7 +1,7 @@
 """Append-only verification persistence and indexed, deterministic reads."""
 import json
 import sqlite3
-from typing import Any, NotRequired, TypedDict, cast
+from typing import NotRequired, TypedDict, cast
 
 from backend.domain.intelligence.verification import FIELDS
 from backend.infrastructure.storage.base import InfoOSRepository
@@ -51,33 +51,6 @@ def decode(row: sqlite3.Row) -> OpportunityVerificationRow:
 
 
 class OpportunityVerificationRepository(InfoOSRepository):
-    @staticmethod
-    def append(conn: sqlite3.Connection, payload: dict[str, Any]) -> None:
-        """Caller owns the transaction; there is deliberately no update/delete use case."""
-        conn.execute(f"insert into opportunity_verifications ({', '.join(COLUMNS)}) "
-                     f"values ({', '.join(':' + field for field in COLUMNS)})",
-                     {**payload, "breakdown_snapshot": json.dumps(payload["breakdown_snapshot"], ensure_ascii=False)
-                      if payload["breakdown_snapshot"] is not None else None})
-
-    @staticmethod
-    def find_submission(conn: sqlite3.Connection, token_id: str, client_verification_id: str) -> OpportunityVerificationRow | None:
-        row = conn.execute(f"select {', '.join(COLUMNS)} from opportunity_verifications "
-                           "where token_id=? and client_verification_id=?",
-                           (token_id, client_verification_id)).fetchone()
-        return decode(row) if row else None
-
-    @staticmethod
-    def latest_conclusion(conn: sqlite3.Connection, card_id: str) -> sqlite3.Row | None:
-        """Newest record that no correction supersedes: its conclusion and time."""
-        return conn.execute("select conclusion, created_at from opportunity_verifications v where card_id=? "
-                            "and not exists(select 1 from opportunity_verifications n where n.supersedes=v.verification_id) "
-                            "order by created_at desc, verification_id desc limit 1", (card_id,)).fetchone()
-
-    @staticmethod
-    def belongs_to_card(conn: sqlite3.Connection, verification_id: str, card_id: str) -> bool:
-        return conn.execute("select 1 from opportunity_verifications where verification_id=? and card_id=?",
-                            (verification_id, card_id)).fetchone() is not None
-
     def page(self, *, card_id: str | None = None, since: str | None = None, conclusion: str | None = None,
              after: tuple[str, str] | None = None, limit: int = 20) -> list[OpportunityVerificationListRow]:
         clauses, params = [], []

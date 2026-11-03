@@ -1,8 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import App from "../../App";
+import { setResearchStatus } from "../../lib/api/opportunities";
 import { getJson } from "../../lib/api/http";
 
+vi.mock("../../lib/api/opportunities", () => ({ setResearchStatus: vi.fn() }));
 vi.mock("../../lib/api/http", () => ({ getJson: vi.fn() }));
 
 beforeEach(() => {
@@ -32,6 +34,14 @@ it("renders ordered Chinese fields, original evidence, conflict, research histor
   expect(screen.getByText("用户选择")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "原帖" })).toHaveAttribute("href", "/r/card/one");
   expect(screen.getByRole("link", { name: "同源项目" })).toHaveAttribute("href", "/r/knowledge/kc_two");
+  vi.mocked(setResearchStatus).mockResolvedValue({ knowledge_id: "kc_one", research_status: "project", changed: true });
+  fireEvent.change(screen.getByLabelText("调研状态"), { target: { value: "project" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存状态" }));
+  await waitFor(() => expect(setResearchStatus).toHaveBeenCalledWith("kc_one", "project", null));
+  expect(await screen.findByText("调研状态已保存")).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("备注（可选）"), { target: { value: "开始验证" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存状态" }));
+  await waitFor(() => expect(setResearchStatus).toHaveBeenLastCalledWith("kc_one", "project", "开始验证"));
   expect([...document.querySelectorAll(".knowledge-reader__fields > div > dt")].map(el => el.textContent)).toEqual(["生意", "价格", "获客渠道", "商业模式"]);
 });
 

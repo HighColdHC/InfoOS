@@ -15,9 +15,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from backend.api.mcp.offload import threaded
 from backend.api.mcp.knowledge_tools import register_knowledge_tools
 from backend.read_models.knowledge import knowledge_for_card
-from backend.api.mcp.verification_tools import register_verification_tools
 from backend.read_models.verifications import list_verifications
-from backend.api.mcp.opportunity_tools import register_opportunity_tools
 from backend.infrastructure.storage.opportunity_breakdowns import OpportunityBreakdownRepository
 from backend.api.mcp.source_tools import register_source_tools
 from backend.api.mcp.source_stats_tools import register_source_stats_tools
@@ -214,9 +212,7 @@ def create_mcp_server(base_dir: Path) -> FastMCP:
     register_collect_tools(server, base_dir, _require_scope, _card_link)
     register_source_tools(server, base_dir, _require_scope)
 
-    register_opportunity_tools(server, base_dir, _require_scope, _card_link)
 
-    register_verification_tools(server, base_dir, _require_scope, _card_link)
 
     # Register get_event in T3 and feedback in T4.
     return server

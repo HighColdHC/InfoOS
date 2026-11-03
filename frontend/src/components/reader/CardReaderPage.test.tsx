@@ -124,10 +124,10 @@ it.each([true, false, null, undefined])("reader renders digest badge only for tr
   expect(Boolean(screen.queryByText("精华"))).toBe(is_digest === true);
 });
 
-it("信息卡头部提供商机看板深链接", async () => {
+it("信息卡保留历史拆解并链接拆出的知识卡", async () => {
   window.history.replaceState({}, "", "/r/card/card-one");
-  vi.mocked(fetchCardPreviewDetail).mockResolvedValue({ ...detail, opportunity: { has_breakdown: true, next_step: "observe" } });
+  vi.mocked(fetchCardPreviewDetail).mockResolvedValue({ ...detail, opportunity: { has_breakdown: true, next_step: "observe" }, knowledge_cards: [{ knowledge_id: "kc_one", kind: "opportunity", title: "课程商机知识卡", deep_link: "/r/knowledge/kc_one" }] });
   render(<App />);
-  expect(await screen.findByRole("link", { name: "在商机看板打开" })).toHaveAttribute("href", "/r/opportunities?card=card-one");
+  expect(await screen.findByRole("link", { name: "课程商机知识卡" })).toHaveAttribute("href", "/r/knowledge/kc_one");
   expect(screen.getByText(/商机拆解：持续观察/)).toBeInTheDocument();
 });

@@ -5,7 +5,6 @@ from tests.infoos.e2e.support import (
     PROFILE, START, assert_denied, build_seeded, call, drain, evaluation, reader_get, seed_raw,
 )
 from tests.infoos.test_mcp_interface import _call
-from tests.infoos.test_verification_domain import item as verification
 
 
 def test_browse_journey(journey, tmp_path, monkeypatch):
@@ -36,13 +35,10 @@ def test_browse_journey(journey, tmp_path, monkeypatch):
 # Explicit independent expectation: adding a tool requires assigning its scope here.
 READ = {"get_knowledge_schema", "list_extraction_candidates", "search_knowledge_cards", "list_knowledge_cards", "get_knowledge_card","get_card", "search", "get_profile", "get_daily_brief", "get_updates_since", "get_evaluation_rubric",
         "list_new_cards", "get_cards", "get_source_stats", "get_collect_capabilities", "get_research_run",
-        "get_source_capabilities", "list_sources", "list_source_changes", "get_opportunity_lens",
-        "list_opportunity_candidates", "list_opportunities", "list_verifications"}
+        "get_source_capabilities", "list_sources", "list_source_changes"}
 SCOPES = {"submit_knowledge_extractions": "evaluation:write", "set_research_status": "verification:write",**dict.fromkeys(READ, "intelligence:read"), "push_profile": "profile:write",
-          "submit_evaluations": "evaluation:write", "submit_opportunity_breakdowns": "evaluation:write",
-          "start_research": "collect:write", "capture_url": "collect:write", "get_capture": "collect:write",
-          "create_source": "sources:write", "update_source": "sources:write", "set_source_enabled": "sources:write",
-          "submit_verification": "verification:write", "set_opportunity_follow_up": "verification:write"}
+          "submit_evaluations": "evaluation:write", "start_research": "collect:write", "capture_url": "collect:write", "get_capture": "collect:write",
+          "create_source": "sources:write", "update_source": "sources:write", "set_source_enabled": "sources:write"}
 ARGUMENTS = {
     "list_extraction_candidates": {"since": START},
     "search_knowledge_cards": {"kind": "project", "query": "主体"},
@@ -52,10 +48,6 @@ ARGUMENTS = {
     "get_card": {"card_id": "missing"}, "search": {"query": "场景"}, "push_profile": {"markdown": PROFILE},
     "get_updates_since": {"since": START}, "list_new_cards": {"since": START}, "get_cards": {"card_ids": ["missing"]},
     "submit_evaluations": {"evaluator": "journey", "items": [evaluation("missing")]},
-    "list_opportunity_candidates": {"since": START},
-    "submit_opportunity_breakdowns": {"evaluator": "journey", "items": [{"card_id": "missing"}]},
-    "submit_verification": verification(card_id="missing"),
-    "set_opportunity_follow_up": {"card_id": "missing", "state": "following"},
     "get_research_run": {"research_run_id": "missing"}, "get_capture": {"capture_id": "missing"},
     "capture_url": {"url": "https://8.8.8.8/journey"},
     "start_research": {"name": "权限矩阵", "keywords": ["AI"], "platforms": [{"platform": "github", "max_items": 1}]},

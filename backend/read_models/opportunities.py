@@ -8,16 +8,8 @@ from pathlib import Path
 from collections.abc import Mapping
 from typing import Generic, TypeVar, TypedDict, cast
 
-from backend.read_models.opportunity_board_data import follow_up_summary
 from backend.domain.json_types import JsonObject
-
-from backend.domain.intelligence.opportunity import (
-    ENUM_MEANINGS, OPPORTUNITY_CANDIDATE_RULES_VERSION, OPPORTUNITY_LENS_VERSION,
-)
 from backend.infrastructure.storage.card_entry import project_display_titles
-from backend.infrastructure.storage.interest_profiles import InterestProfileRepository
-from backend.infrastructure.storage.opportunity_candidates import OpportunityCandidateRepository, OpportunityCandidateRow
-from backend.infrastructure.storage.opportunity_breakdowns import OpportunityBreakdownRepository, OpportunityListRow
 
 
 PageRow = TypeVar("PageRow", bound=Mapping[str, object])
@@ -26,12 +18,6 @@ PageRow = TypeVar("PageRow", bound=Mapping[str, object])
 class OpportunityPage(TypedDict, Generic[PageRow]):
     items: list[PageRow]
     next_cursor: str | None
-
-
-class OpportunityCandidatePage(TypedDict):
-    items: list[OpportunityCandidateRow]
-    next_cursor: str | None
-    profile_version: int | None
 
 
 def _stamp(value: str, *, entry: bool = False) -> str:
@@ -79,39 +65,3 @@ def _context(values: object) -> str:
 def _limit(limit: object) -> None:
     if type(limit) is not int or not 1 <= limit <= 100:
         raise ValueError("invalid_limit")
-
-
-def list_opportunity_candidates(base_dir: Path, since: str, until: str | None = None, limit: int = 50,
-                                cursor: str | None = None, only_unbroken: bool = True) -> OpportunityCandidatePage:
-    _limit(limit)
-    if type(only_unbroken) is not bool:
-        raise ValueError("invalid_only_unbroken")
-    if until is not None and _stamp(since) > _stamp(until):
-        raise ValueError("invalid_window")
-    start, end = _stamp(since, entry=True), _stamp(until, entry=True) if until is not None else None
-    profile = InterestProfileRepository(base_dir).get()
-    profile_version = profile["profile_version"] if profile else None
-    context = _context(["candidates", start, end, only_unbroken, OPPORTUNITY_LENS_VERSION,
-                        OPPORTUNITY_CANDIDATE_RULES_VERSION, profile_version])
-    rows = OpportunityCandidateRepository(base_dir).page(since=start, until=end, limit=limit,
-        after=_cursor(cursor, context), only_unbroken=only_unbroken, profile_version=profile_version)
-    return {**_page(base_dir, rows, limit, context, "first_seen_at", "card_id"), "profile_version": profile_version}
-
-
-def list_opportunities(base_dir: Path, since: str | None = None, next_step: str | None = None,
-                       min_replicability: int | None = None, limit: int = 20,
-                       cursor: str | None = None) -> OpportunityPage[OpportunityListRow]:
-    _limit(limit)
-    if next_step is not None and (not isinstance(next_step, str) or next_step not in ENUM_MEANINGS["next_step"]):
-        raise ValueError("invalid_next_step")
-    if min_replicability is not None and (type(min_replicability) is not int or not 0 <= min_replicability <= 100):
-        raise ValueError("invalid_min_replicability")
-    start = _stamp(since) if since is not None else None
-    context = _context(["opportunities", start, next_step, min_replicability])
-    rows = OpportunityBreakdownRepository(base_dir).list_latest(since=start, next_step=next_step,
-        min_replicability=min_replicability, after=_cursor(cursor, context), limit=limit)
-    page = _page(base_dir, rows, limit, context, "created_at", "breakdown_id")
-    follow_ups = follow_up_summary(base_dir, page["items"])
-    for row in page["items"]:
-        row["follow_up"] = follow_ups[row["card_id"]]
-    return page

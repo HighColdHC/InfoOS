@@ -29,7 +29,7 @@ export function ReaderContent({ detail }: { detail: CardPreviewDetail }) {
           <span>发布于 <time dateTime={cardPreviewDateTime(card.published_at)}>{formatCardPreviewDate(card.published_at)}</time></span>
         </p>
         {sourceUrl ? <a className="card-reader__source" href={sourceUrl} target="_blank" rel="noopener noreferrer">查看原文<ArrowUpRight size={15} aria-hidden="true" /></a> : null}
-        {detail.opportunity !== null ? <p className="card-reader__opportunity">商机拆解：{{ verify: "建议核实", observe: "持续观察", skip: "暂不考虑" }[detail.opportunity.next_step]} · <a href={`/r/opportunities?card=${encodeURIComponent(card.card_id)}`}>在商机看板打开</a></p> : null}
+        {detail.opportunity !== null ? <p className="card-reader__opportunity">商机拆解：{{ verify: "建议核实", observe: "持续观察", skip: "暂不考虑" }[detail.opportunity.next_step]}</p> : null}
         <p className="card-reader__state">{stateLine}</p>
       </header>
 

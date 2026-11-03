@@ -11,7 +11,7 @@ def check_agent_writeback(base_dir, *, now: str | None = None) -> dict:
     timestamp = now or utc_now_seconds_z()
     clock, config = parse_utc(timestamp), load_config()['agent_watchdog']
     facts = AgentWatchdogRepository(base_dir).facts(older_than=format_utc_seconds_z(clock - timedelta(hours=6)),
-        evaluate_since=config['evaluate_since'], opportunities_since=config['opportunities_since'])
+        evaluate_since=config['evaluate_since'])
     queued = []
     for fact in facts:
         if not fact['pending']:
@@ -21,9 +21,9 @@ def check_agent_writeback(base_dir, *, now: str | None = None) -> dict:
         hours = (clock - parse_utc(since)).total_seconds() / 3600
         if hours < config[f"{fact['job']}_stall_hours"]:
             continue
-        label = '评估' if fact['job'] == 'evaluate' else '商机拆解'
+        label = '评估'
         queued.extend(enqueue_notification(base_dir, kind=NotificationKind.AGENT_WRITEBACK_STALLED,
             title=f'{label} 写回停滞', body=f"{label}已 {int(hours)} 小时没有写回，还有 {fact['pending']} 张待处理。"
-            f"可能原因：Mac 休眠或关机、隧道断开、Codex 运行失败。Mac 日志在 ~/Library/Logs/infoos-{fact['job']}/。",
+            "可能原因：Mac 休眠或关机、隧道断开、Codex 运行失败。Mac 日志在 ~/Library/Logs/infoos-evaluate/。",
             dedupe_key=f"agent-stalled:{fact['job']}:{fact['last_writeback'] or 'never'}", now=timestamp))
     return {'notification_ids': queued}

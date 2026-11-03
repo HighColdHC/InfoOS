@@ -13,8 +13,8 @@ const settings: Settings = {
   config: { content_push: { daily_brief_digest: true }, enabled: true, channels: { feishu: { enabled: true, receive_id: "ou_fixture" } },
     quiet_hours: { start: "23:00", end: "08:00", timezone: "Asia/Shanghai" },
     auth_qr: { codes_per_round: 3, round_interval_hours: 4, max_rounds_per_day: 4 },
-    agent_watchdog: { evaluate_stall_hours: 30, opportunities_stall_hours: 9,
-      evaluate_since: "2026-09-16T00:00:00Z", opportunities_since: "2026-10-14T00:00:00Z" } },
+    agent_watchdog: { evaluate_stall_hours: 30,
+      evaluate_since: "2026-09-16T00:00:00Z" } },
   readiness: { feishu: true, email: false }, latest_results: [],
 };
 

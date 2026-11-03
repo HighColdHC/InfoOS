@@ -14,9 +14,5 @@ def card_link(card_id: str) -> dict[str, Any]:
     return reader_link(f"/r/card/{quote(card_id, safe='')}")
 
 
-def opportunity_link(card_id: str) -> dict[str, Any]:
-    return reader_link(f"/r/opportunities?card={quote(card_id, safe='')}")
-
-
 def brief_link(brief_date: str) -> dict[str, Any]:
     return reader_link(f"/r/brief/{quote(brief_date, safe='')}")

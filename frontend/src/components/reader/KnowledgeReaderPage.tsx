@@ -1,6 +1,8 @@
 import "../../styles/_card-reader.css";
 import "../../styles/_knowledge-reader.css";
 import { useEffect, useState } from "react";
+import { setResearchStatus } from "../../lib/api/opportunities";
+import type { ResearchStatus } from "../../lib/types/opportunities";
 import { getJson } from "../../lib/api/http";
 import type { FieldRule, FieldValue, KnowledgeCard } from "../../lib/types/knowledge";
 import { KNOWLEDGE_LABELS, RESEARCH_LABELS } from "../../lib/types/knowledge";
@@ -22,11 +24,24 @@ export function KnowledgeReaderPage() {
   const segment = window.location.pathname.match(/^\/r\/knowledge\/([^/]+)\/?$/)?.[1];
   const [card, setCard] = useState<KnowledgeCard | null>(null);
   const [error, setError] = useState("");
+  const [status, setStatus] = useState("pending");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  async function saveStatus(card: KnowledgeCard) {
+    setSaving(true); setMessage("");
+    try {
+      const result = await setResearchStatus(card.knowledge_id, status as ResearchStatus, note.trim() || null);
+      setCard(await getJson<KnowledgeCard>(`/api/intelligence/knowledge/${segment}`));
+      setNote(""); setMessage(result.changed ? "调研状态已保存" : "调研状态未变化");
+    } catch { setMessage("保存或刷新失败，请重试"); }
+    finally { setSaving(false); }
+  }
   useEffect(() => {
     if (!segment) { setError("知识卡地址无效"); return; }
     const controller = new AbortController();
     void getJson<KnowledgeCard>(`/api/intelligence/knowledge/${segment}`, controller.signal)
-      .then(value => { if (!controller.signal.aborted) setCard(value); }, () => {
+      .then(value => { if (!controller.signal.aborted) { setCard(value); setStatus(value.research_status ?? "pending"); } }, () => {
         if (!controller.signal.aborted) setError("知识卡不存在或暂时无法读取");
       });
     return () => controller.abort();
@@ -49,6 +64,14 @@ export function KnowledgeReaderPage() {
       </dl></section>
       {card.kind === "opportunity" && card.research_status !== null ? <section>
         <h2>调研状态：{RESEARCH_LABELS[card.research_status]}</h2>
+        <form className="knowledge-reader__research" onSubmit={event => { event.preventDefault(); void saveStatus(card); }}>
+          <label>调研状态<select value={status} disabled={saving} onChange={event => setStatus(event.target.value)}>
+            {Object.entries(RESEARCH_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select></label>
+          <label>备注（可选）<textarea maxLength={200} value={note} disabled={saving} onChange={event => setNote(event.target.value)} /></label>
+          <button type="submit" disabled={saving}>{saving ? "保存中…" : "保存状态"}</button>
+          {message ? <p role="status">{message}</p> : null}
+        </form>
         <ul>{card.status_history.map(event => <li key={event.event_id}>
           {RESEARCH_LABELS[event.value]} · {formatCardPreviewDate(event.created_at)} · {event.actor}
           {event.note !== null ? <p>{event.note}</p> : null}

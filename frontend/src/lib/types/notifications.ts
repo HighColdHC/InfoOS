@@ -9,7 +9,7 @@ export type NotificationSettings = {
     channels: { feishu: FeishuSettings };
     quiet_hours: { start: string; end: string; timezone: string };
     auth_qr: { codes_per_round: number; round_interval_hours: number; max_rounds_per_day: number };
-    agent_watchdog: { evaluate_stall_hours: number; opportunities_stall_hours: number; evaluate_since: string; opportunities_since: string };
+    agent_watchdog: { evaluate_stall_hours: number; evaluate_since: string };
   };
   readiness: { feishu: boolean; email: boolean };
   latest_results: { channel: string; status: string; last_error_code: string | null; sent_at: string | null; updated_at: string }[];

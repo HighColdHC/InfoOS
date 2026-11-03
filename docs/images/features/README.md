@@ -4,22 +4,40 @@
 
 通知与采集环境合并为 `collection-environment.webp`，不再使用 `notification-settings.webp`。Token 与账号截图来自清除凭据后的创建前状态；环境页则使用按线上白名单事实重建的会话、账号状态和组件版本快照，不能称为首次安装态。
 
+2026-11-02 仅重拍商机看板与商机统计，源码、容器与前端产物 revision 为 `492e5bf5`（完整值 `492e5bf5097c490836869810a71f3f95da43c29a`）。其余 15 张图保留 2026-10-29 全量批次的像素；下文的组件快照、来源健康与全量库数量均属于该历史批次，不能当作新两图的当前数据。
+
+## 2026-11-02 商机两图补拍
+
+两图来自同一份一致性只读备份，全部商机知识卡 **175** 张；看板默认每列最多加载 50 张，本图在待调研列完整展示前四张，其他列保留空态。统计页完整展示五组图表；每日新增按上海自然日为 10 / 25 / 19 / 18 / 24 / 70 / 9（2026-10-28 至 2026-11-03）。任务日期为 2026-11-02，拍摄时上海日期已为 2026-11-03，未冻结或改写时间。
+
+新规则将 `.opportunities .tile h3` 按标题字段、`.opportunities .tile__next` 按正文整段虚构替换，卡片及状态选择器的辅助标签也整段替换；纯金额文本同样替换。卡片子类型、强度、证据数、平台、状态、时间，以及统计页的总数、图表和日期提示保留。本次新增规则只含选择器与字段类型，不含原库账号、产品、标题或金额叙述。
+
+看板为 **1440×1039、80,050 字节**；统计为 **1440×1432、55,548 字节**。高度在脱敏后按内容确定：看板到第四张卡片底部，统计到最后一组图表底部；保留真实产品布局与深色主题。其余 15 张文件的 SHA-256 与补拍前一致。
+
+本次 `--only` 跳过其他页面和与阅读页无关的采集器健康前置检查，不改写健康状态。Python 源码通过 `PYTHONPATH` 指向当前 checkout，SQLite、浏览器临时区和隔离 HOME 均放在 `/tmp` 私有目录；本机未运行产品测试、TypeScript 检查或 npm 构建。文件大小、分层检查通过。
+
+两张最终 WebP 均已逐张打开检查：虚构标题与摘要为中性文本，无真实账号、产品或金额叙述，卡片与图表完整可见。两图 DOM 原库语料命中均为 **0**；[远端原库复核](../../../scripts/audit-readme-snapshot.py) 使用 `--only opportunity-board opportunity-stats`，OCR 私有标识与完整语料（含正文片段）命中均为 **0**，README、截图说明与脚本的私有标识命中均为 **0**。当前 17 张图总量 **1,897,456 字节**，最大单张 **366,184 字节**。
+
+本机 `readme_screenshot_audit.py` 对全部 17 张图的 OCR 私有标识命中为 **0**，文档与脚本命中为 **0**；无损 WebP 均仅含 VP8L，无 EXIF/XMP/ICC 或文字元数据。标识匹配仍按完整文本与词边界检查，合并公共边界和首字符分组以减少大语料下的重复匹配。
+
 ## 准备与导出
 
-阅读 [备份与恢复点](../../../deploy/docker/README.md#独立磁盘备份)。准备 Python 3.12+、Node.js/npm、Playwright Chromium、Pillow，以及已核验 SSH 主机身份的私有运维入口。入口支持 `command <远端命令>`，连接配置由入口自行加载，不读取或输出配置内容。OCR 使用 macOS Swift / Vision。
+阅读 [备份与恢复点](../../../deploy/docker/README.md#独立磁盘备份)。准备 Python 3.12+、匹配 revision 的前端产物、Playwright Chromium、Pillow，以及已核验 SSH 主机身份的私有运维入口。入口支持 `command <远端命令>`，连接配置由入口自行加载，不读取或输出配置内容。OCR 使用 macOS Swift / Vision。
 
 ```bash
 uv venv .venv
 uv pip install --python .venv/bin/python -e '.[web]' 'playwright==1.64.1' 'Pillow==13.0.0'
 .venv/bin/python -m playwright install chromium
-npm --prefix frontend ci
-npm --prefix frontend run build
+# 先提供匹配 revision 的 frontend/dist；本次从已核验容器取回，不在本机构建。
 .venv/bin/python scripts/export-readme-snapshot.py \
   --transport /path/to/private-command-wrapper \
   --container YOUR_APPLIANCE_CONTAINER
 .venv/bin/python scripts/run-readme-demo.py \
-  --snapshot /tmp/infoos-shots-XXXXXXXX/snapshot.sqlite3
+  --snapshot /tmp/infoos-shots-XXXXXXXX/snapshot.sqlite3 \
+  --only opportunity-board opportunity-stats
 ```
+
+本次容器产物位于 `/opt/infoos/app/frontend/dist`，经私有入口 `command` 执行 tar + base64，通过 stdout 传回并在本机解码；连接配置由入口自行加载。`frontend/dist` 被 Git 忽略。`--only` 仅支持这两张图，跳过空库首次引导与其他截图；省略它仍运行原来的全量流程。
 
 [导出脚本](../../../scripts/export-readme-snapshot.py) 用 `docker inspect` 识别挂载，以 SQLite URI `mode=ro` 打开源库，用在线备份 API 生成一致性副本并执行 `quick_check`。远端只在宿主机临时目录创建副本，导出后自动删除。本机临时目录权限 `0700`、数据库权限 `0600`。不复制附件、归档、Chrome profile、密码库、Token 文件或旧 LLM 配置。
 
@@ -27,7 +45,7 @@ npm --prefix frontend run build
 
 版本来自线上 Chrome `--version`、FFmpeg `-version`、已安装 Python 包 metadata 和 SQLite 版本；Bridge 的状态、版本与检查时间直接取产品入口已保存的组件记录。导出只读取这些事实，没有执行组件状态刷新、Bridge 连通探测或平台登录检查。Chrome 与 FFmpeg 仅显示实际版本号，省略产品名前缀与版权行。
 
-本轮线上只读核验：全部 **38**、启用 **34**、需要关注 **0**；线上核验与副本截图均为 **99.9%**（副本截图时原值 **0.9986033519553073**）。口径为近 7 天全部来源的运行成功率，包括当前维护列表外的来源；分母为 `success + failed`。会话 schema v2、`is_alive=true`、`last_health_status=ready`、`binding_proof=supervised_container_dedicated_profile`。会话记录与 Bridge 检查结果分别保留；Bridge 已保存检查为 `connected`、1.0.26，检查时间 `2026-10-29T04:51:06.384857Z`。本轮没有重新探测，截图不证明此后持续连通。
+2026-10-29 全量批次线上只读核验：全部 **38**、启用 **34**、需要关注 **0**；线上核验与副本截图均为 **99.9%**（副本截图时原值 **0.9986033519553073**）。口径为近 7 天全部来源的运行成功率，包括当前维护列表外的来源；分母为 `success + failed`。会话 schema v2、`is_alive=true`、`last_health_status=ready`、`binding_proof=supervised_container_dedicated_profile`。会话记录与 Bridge 检查结果分别保留；Bridge 已保存检查为 `connected`、1.0.26，检查时间 `2026-10-29T04:51:06.384857Z`。本轮没有重新探测，截图不证明此后持续连通。
 
 | 组件 | 真实版本 | 展示边界 |
 | --- | --- | --- |
@@ -45,7 +63,7 @@ npm --prefix frontend run build
 
 只启动随机 loopback 端口 API；无 scheduler、worker、agent。API 导入产品前禁止外连、外部 DNS 与子进程；Playwright 只放行本实例 GET/HEAD。不触发采集、Chrome 启动、平台登录、通知发送或外部 agent 调用。
 
-线上源码与镜像 revision 均为 `3c327005889cb57c5ee2ffd92944924136aff640`，容器健康。副本没有生效的运行保护；没有改写副本保护状态。线上只读 collector 为 `ready`、逾期来源 0。最终代码在隔离副本上运行，带壳页面不显示「部分处理异常」；没有生效的保护时，产品自然不渲染「运行保护」区块，因此也没有「已熔断」卡片。Bridge 从线上白名单事实重建，显示「已连接」、1.0.26 与原检查时间；其余六项显示已安装及线上真实版本。
+2026-10-29 全量批次的线上源码与镜像 revision 均为 `3c327005889cb57c5ee2ffd92944924136aff640`，容器健康。副本没有生效的运行保护；没有改写副本保护状态。线上只读 collector 为 `ready`、逾期来源 0。最终代码在隔离副本上运行，带壳页面不显示「部分处理异常」；没有生效的保护时，产品自然不渲染「运行保护」区块，因此也没有「已熔断」卡片。Bridge 从线上白名单事实重建，显示「已连接」、1.0.26 与原检查时间；其余六项显示已安装及线上真实版本。
 
 通知连接配置没有复制：控件显示本机默认未连接状态；数据库中的历史投递状态和静默时间控件照实保留。Token、账号页是清除真实凭据后的表单。首次引导单独使用空库。
 
@@ -61,7 +79,7 @@ npm --prefix frontend run build
 
 ## 每张图的清单
 
-本轮副本：345 条来源（含列表外来源）、13,855 张信息卡、159 张知识卡、416,803 个任务、2,674 条商机拆解。五类知识为资讯 29、商机 25、项目 44、选题 16、方法 45。数字仅描述本轮备份；组件快照时间为 `2026-10-29T05:32:55.492819Z`，数据库随后执行在线一致性备份。
+2026-10-29 全量批次副本：345 条来源（含列表外来源）、13,855 张信息卡、159 张知识卡、416,803 个任务、2,674 条商机拆解。五类知识为资讯 29、商机 25、项目 44、选题 16、方法 45。数字仅描述本轮备份；组件快照时间为 `2026-10-29T05:32:55.492819Z`，数据库随后执行在线一致性备份。
 
 | 文件 | 视图与虚构替换范围 | 保留的真实数字摘录 | DOM 原文 / OCR 私有标识命中 |
 | --- | --- | --- | --- |
@@ -79,19 +97,19 @@ npm --prefix frontend run build
 | [token-permissions.webp](token-permissions.webp) | 清除凭据后的创建前状态，不补造 Token | 接口 v1、空列表 0 行；权限 scope 保留 | 0 / 0 |
 | [account-settings.webp](account-settings.webp) | 临时隔离账号与空白密码表单 | 最少 12 位、最多 72 个 UTF-8 字节、中文通常 3 字节 | 0 / 0 |
 | [export-and-logs.webp](export-and-logs.webp) | 导出能力与本次日志；消息、地址、路径虚构 | 隔离实例本次日志共 1 条、第 1 页，INFO | 0 / 0 |
-| [opportunity-board.webp](opportunity-board.webp) | 全历史真实看板；标题、来源与描述虚构 | 全历史新推荐 87；近 24 小时新推荐 0；跟进各列 0 | 0 / 0 |
-| [opportunity-stats.webp](opportunity-stats.webp) | 全历史漏斗、平台表、每日拆解与进度 | 漏斗 4,416/4,195/2,705/2,295/87；建议 87/1,224/984 | 0 / 0 |
+| [opportunity-board.webp](opportunity-board.webp) | 2026-11-02 补拍：五列调研看板；标题、赚钱信号全文与辅助标签虚构 | 待调研 175；调研中 / 已立项 / 继续观察 / 放弃均为 0；首四卡强度 88/88/85/85 | 0 / 0 |
+| [opportunity-stats.webp](opportunity-stats.webp) | 2026-11-02 补拍：全部商机知识卡的状态、子类型、赚钱信号、每日新增与平台分布 | 共 175；子类型 93/0/32/50；赚钱信号 47/104/36/30/30/1；平台 128/28/18/2/1 | 0 / 0 |
 | [onboarding.webp](onboarding.webp) | 独立空库首次设置 | 步骤 1/2、平台、未检查状态 | 0 / 0 |
 
 ## 验证、边界与收尾
 
 图片须逐张打开检查。自动检查不能替代视觉检查，也不证明线上采集、ASR、Bridge 连通、通知发送、平台登录或 agent 调用通过。保留的限制：日志行较少；商机看板跟进列为空；移动端首屏仅一张完整知识卡；环境图以组件为重点，平台账号表大部分位于首屏下方。虚构名称可能重复；Bridge「已连接」徽标仍为产品原有灰色样式。上述展示未修改产品样式，也未补造业务行。
 
-日志页只有一行，是隔离实例启动后自己的日志；没有复制线上日志文件，也没有启动后台采集。商机看板中，新推荐有 87 条，后续状态列为 0，反映副本中的当前状态；统计中的历史跟进决策数量不能直接当作当前各列数量。
+日志页只有一行，是隔离实例启动后自己的日志；没有复制线上日志文件，也没有启动后台采集。本次商机看板待调研 175 条，其余四列均为 0，照实展示副本状态；没有插入虚构业务记录。统计页使用商机知识卡口径。赚钱信号和来源平台允许同一卡片出现多个值，各项数量不要求相加等于卡片总数。
 
-本轮验证：本机前端 TypeScript 检查与构建、`check_file_size.py`、`check_layer_deps.py` 通过。逐页拍摄核验 DOM 脱敏、真实统计与界面文案不变，并核对 collector、运行保护及七项组件与线上白名单事实。未运行产品 Python/前端测试全集，未执行远端测试或线上业务操作。
+2026-10-29 全量批次验证（历史记录）：本机前端 TypeScript 检查与构建、`check_file_size.py`、`check_layer_deps.py` 通过。逐页拍摄核验 DOM 脱敏、真实统计与界面文案不变，并核对 collector、运行保护及七项组件与线上白名单事实。未运行产品 Python/前端测试全集，未执行远端测试或线上业务操作。
 
-17 张图片均逐张打开检查；DOM 与拍摄副本原文比对、最终像素 OCR 私有标识比对均逐图为 **0**。截图文档与脚本扫描私有标识为 **0**；所有图片仅含 VP8L 像素块，无元数据。总量 **2,030,432 字节**，最大单张 **366,184 字节**。
+2026-10-29 全量批次的 17 张图片均逐张打开检查；DOM 与拍摄副本原文比对、最终像素 OCR 私有标识比对均逐图为 **0**。截图文档与脚本扫描私有标识为 **0**；所有图片仅含 VP8L 像素块，无元数据。总量 **2,030,432 字节**，最大单张 **366,184 字节**。
 
 导出、截图与审计创建的本机/远端私有临时副本和 OCR 中间文件均已删除，原文集合未持久化；本轮隔离 API 与截图浏览器已退出。工作树没有业务 SQLite、会话文件或其他私有副本。本轮不 commit、不 push、不部署，不修改线上熔断、来源配置或其他线上状态；未读取旧 LLM 配置。
 

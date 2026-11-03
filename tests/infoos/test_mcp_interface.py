@@ -7,6 +7,11 @@ from fastapi.testclient import TestClient
 from backend.app.main import create_app
 from backend.application.usecases.api_tokens import create_token
 from backend.infrastructure.storage.api_request_logs import ApiRequestLogRepository
+from backend.infrastructure.storage.opportunity_breakdowns import OpportunityBreakdownRepository
+from backend.infrastructure.storage.opportunity_verifications import COLUMNS as VERIFICATION_COLUMNS
+from backend.domain.intelligence.verification import validate_verification
+from tests.infoos.test_opportunity_domain import item as breakdown_item
+from tests.infoos.test_verification_domain import item as verification_item
 from backend.infrastructure.storage.repositories import CardAssetRepository, CardContentBlockRepository, CardRepository
 
 
@@ -53,6 +58,18 @@ def test_mcp_auth_tools_audit_and_same_origin_exemption(tmp_path, monkeypatch) -
         "source_url": "https://example.test/image.jpg", "local_path": "card-one/image.jpg",
         "status": "downloaded", "mime_type": "image/jpeg",
     })
+    with CardRepository(tmp_path).connect() as conn:
+        OpportunityBreakdownRepository.upsert(conn, {
+            **breakdown_item("card-one", offer="旧课程"), "breakdown_id": "historical-b", "card_version": 1,
+            "raw_item_revision": None, "lens_version": "opportunity_v1", "rules_version": "old",
+            "evaluator": "old", "token_id": "writer", "created_at": "2026-07-16T01:00:00Z",
+        })
+        record = {**validate_verification(verification_item(card_id="card-one")),
+            "verification_id": "historical-v", "token_id": "writer", "schema_version": "verification_v1",
+            "created_at": "2026-07-16T02:00:00Z", "request_content_hash": None, "breakdown_snapshot": None}
+        conn.execute(f"insert into opportunity_verifications ({','.join(VERIFICATION_COLUMNS)}) "
+                     f"values ({','.join('?' for _ in VERIFICATION_COLUMNS)})",
+                     [record[field] for field in VERIFICATION_COLUMNS])
     reader = create_token(tmp_path, name="MCP reader", scopes=["intelligence:read"])
     other = create_token(tmp_path, name="Other", scopes=["cards:read"])
     with TestClient(app) as client:
@@ -66,7 +83,7 @@ def test_mcp_auth_tools_audit_and_same_origin_exemption(tmp_path, monkeypatch) -
         token = reader["plaintext_token"]
         tools = _call(client, "tools/list", token=token)
         assert tools.status_code == 200
-        assert {tool["name"] for tool in tools.json()["result"]["tools"]} == {"get_card", "search", "get_profile", "push_profile", "get_daily_brief", "get_updates_since", "get_evaluation_rubric", "list_new_cards", "get_cards", "submit_evaluations", "get_source_stats", "get_collect_capabilities", "start_research", "get_research_run", "capture_url", "get_capture", "get_source_capabilities", "list_sources", "create_source", "update_source", "set_source_enabled", "list_source_changes", "get_opportunity_lens", "list_opportunity_candidates", "submit_opportunity_breakdowns", "list_opportunities", "submit_verification", "list_verifications", "set_opportunity_follow_up", "get_knowledge_schema", "list_extraction_candidates", "search_knowledge_cards", "submit_knowledge_extractions", "list_knowledge_cards", "get_knowledge_card", "set_research_status"}
+        assert {tool["name"] for tool in tools.json()["result"]["tools"]} == {"get_card", "search", "get_profile", "push_profile", "get_daily_brief", "get_updates_since", "get_evaluation_rubric", "list_new_cards", "get_cards", "submit_evaluations", "get_source_stats", "get_collect_capabilities", "start_research", "get_research_run", "capture_url", "get_capture", "get_source_capabilities", "list_sources", "create_source", "update_source", "set_source_enabled", "list_source_changes", "get_knowledge_schema", "list_extraction_candidates", "search_knowledge_cards", "submit_knowledge_extractions", "list_knowledge_cards", "get_knowledge_card", "set_research_status"}
         empty_brief = _call(client, "tools/call", {"name": "get_daily_brief", "arguments": {}}, token)
         assert empty_brief.json()["result"]["structuredContent"]["status"] == "not_generated"
         updates = _call(client, "tools/call", {"name": "get_updates_since", "arguments": {
@@ -79,6 +96,10 @@ def test_mcp_auth_tools_audit_and_same_origin_exemption(tmp_path, monkeypatch) -
         assert {block["block_kind"] for block in card_data["content_blocks"]} >= {"intel_summary", "relation_note"}
         assert "intelligence_status" not in card_data
         assert card_data["evaluation"] is None
+        assert card_data["opportunity"]["offer"] == "旧课程"
+        assert card_data["verifications"][0]["verification_id"] == "historical-v"
+        batch = _call(client, "tools/call", {"name": "get_cards", "arguments": {"card_ids": ["card-one"]}}, token)
+        assert batch.json()["result"]["structuredContent"]["items"][0]["verifications"] == card_data["verifications"]
         assert card_data["content"] == "Research body from block"
         assert card_data["missing_reasons"] == ["image_missing"]
         assert card_data["assets"][0]["url"] == "/api/card-preview/assets/asset-one"
@@ -198,13 +219,6 @@ def test_mcp_schema_snapshot_and_worker_thread(tmp_path, monkeypatch):
         "list_new_cards": ({"since", "until", "limit", "cursor", "only_unevaluated", "platform"}, ["since"]),
         "get_cards": ({"card_ids"}, ["card_ids"]),
         "submit_evaluations": ({"evaluator", "items"}, ["evaluator", "items"]),
-        "get_opportunity_lens": (set(), []),
-        "list_opportunity_candidates": ({"since", "until", "limit", "cursor", "only_unbroken"}, ["since"]),
-        "submit_opportunity_breakdowns": ({"evaluator", "items"}, ["evaluator", "items"]),
-        "list_opportunities": ({"since", "next_step", "min_replicability", "limit", "cursor"}, []),
-        "submit_verification": ({"card_id", "recorder", "contact_channel", "offer", "credibility", "conclusion", "contacted_on", "price", "delivery", "funnel", "doubts", "replicability", "note", "supersedes", "client_verification_id", "breakdown_id", "expected_breakdown_hash"}, ["card_id", "recorder", "contact_channel", "offer", "credibility", "conclusion", "client_verification_id"]),
-        "list_verifications": ({"card_id", "since", "conclusion", "limit", "cursor"}, []),
-        "set_opportunity_follow_up": ({"card_id", "state", "reason"}, ["card_id", "state"]),
         "get_source_stats": ({"since", "until", "min_evaluated"}, []),
         "get_collect_capabilities": (set(), []),
         "start_research": ({"name", "keywords", "platforms", "date_range", "idempotency_key"}, ["name", "keywords", "platforms"]),

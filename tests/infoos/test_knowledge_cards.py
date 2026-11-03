@@ -106,6 +106,8 @@ def test_four_actions_quotes_conflicts_status_and_shared_origin(library):
     assert len(get_knowledge_card(base, opportunity)["status_history"]) == 1
     with pytest.raises(ValueError, match="not_opportunity_card"):
         set_research_status(base, target, "observe", None, actor="test")
+    with pytest.raises(ValueError, match="knowledge_not_found"):
+        set_research_status(base, "missing", "observe", None, actor="test")
     assert extract(base, "card-5", [knowledge(quotes=["伪造"])])["reason"] == "quote_not_in_card"
     missing_fields = knowledge()
     missing_fields.pop("fields")

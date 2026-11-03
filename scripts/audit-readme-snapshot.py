@@ -35,7 +35,9 @@ with tempfile.TemporaryDirectory(prefix="infoos-shots-audit-") as directory:
     values = namespace["corpus"](path)
     identifiers = values["identity"] | {v for v in values["body"] if re.match(r"https?://|@|[\w.+-]+@",v)}
     audit = namespace["IdentifierAudit"](identifiers)
+    prose_audit = namespace["LeakAudit"](values)
     print(json.dumps({"ocr_hits":{k:audit.inspect(v) for k,v in payload["ocr"].items()},
+                      "ocr_corpus_hits":{k:prose_audit.inspect(v)[0]["count"] for k,v in payload["ocr"].items()},
                       "text_hits":{k:audit.inspect([v]) for k,v in payload["texts"].items()},
                       "identifier_count":len(identifiers)}))
 '''
@@ -46,8 +48,11 @@ def main():
     parser.add_argument("--transport", type=Path, required=True)
     parser.add_argument("--container", required=True)
     parser.add_argument("--report", type=Path, required=True)
+    parser.add_argument("--only", nargs="+", choices=["opportunity-board", "opportunity-stats"])
     args = parser.parse_args()
     images = sorted((ROOT / "docs/images/features").glob("*.webp"))
+    if args.only:
+        images = [path for path in images if path.stem in args.only]
     with tempfile.TemporaryDirectory(prefix="infoos-shots-audit-", dir="/tmp") as directory:
         work = Path(directory)
         swift = work / "ocr.swift"
@@ -70,6 +75,7 @@ def main():
         args.report.write_text(json.dumps(report,ensure_ascii=False,indent=2))
         print(json.dumps(report,ensure_ascii=False))
         assert not any(report["ocr_hits"].values()) and not any(report["text_hits"].values()), "Private identifier audit failed"
+        assert not any(report["ocr_corpus_hits"].values()), "Private prose audit failed"
 
 
 if __name__ == "__main__":

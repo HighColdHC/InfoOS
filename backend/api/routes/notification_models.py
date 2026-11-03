@@ -49,9 +49,7 @@ class QrPatch(PatchModel):
 
 class WatchdogPatch(PatchModel):
     evaluate_stall_hours: int | None = Field(default=None, ge=1, le=720, strict=True)
-    opportunities_stall_hours: int | None = Field(default=None, ge=1, le=720, strict=True)
     evaluate_since: str | None = Field(default=None, pattern=r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$')
-    opportunities_since: str | None = Field(default=None, pattern=r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$')
 
 
 class EmailPatch(PatchModel):

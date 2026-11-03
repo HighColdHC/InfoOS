@@ -122,11 +122,11 @@ def test_browse_list_uses_existing_reader_auth(client, monkeypatch):
 
 @pytest.mark.parametrize("path,method,status", [
     ("/api/opportunities/board", "GET", 204), ("/api/opportunities/stats?window=7d", "GET", 204),
-    ("/api/opportunities/card-1", "HEAD", 204), ("/r/opportunities", "GET", 204),
-    ("/r/opportunities/stats", "HEAD", 204), ("/api/opportunities/card-1/follow-up", "PUT", 204),
-    ("/api/opportunities/card-1/follow-up", "DELETE", 401), ("/api/opportunities/board", "PUT", 401),
-    ("/api/opportunities/card-1", "PUT", 401), ("/api/card-preview/card-1", "PUT", 401),
-    ("/r/opportunities", "PUT", 401), ("/api/opportunities/card-1/follow-up/extra", "PUT", 401),
+    ("/api/opportunities/board", "HEAD", 204), ("/r/opportunities", "GET", 204),
+    ("/r/opportunities/stats", "HEAD", 204), ("/api/opportunities/card-1/research-status", "PUT", 204),
+    ("/api/opportunities/card-1/research-status", "DELETE", 401), ("/api/opportunities/board", "PUT", 401),
+    ("/api/opportunities/card-1", "GET", 401), ("/api/opportunities/card-1/research-status", "GET", 401), ("/api/card-preview/card-1", "PUT", 401),
+    ("/r/opportunities", "PUT", 401), ("/api/opportunities/card-1/research-status/extra", "PUT", 401),
 ])
 def test_opportunity_reader_paths(client, path, method, status):
     assert client.get("/api/internal/reader-authorize", headers=headers(**{

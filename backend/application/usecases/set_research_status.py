@@ -15,7 +15,9 @@ def set_research_status(base_dir: Path, knowledge_id: str, status: str, note: st
     with KnowledgeQueryRepository(base_dir).connect() as conn:
         conn.execute("begin immediate")
         card = KnowledgeQueryRepository.get(conn, knowledge_id)
-        if card is None or card["kind"] != "opportunity":
+        if card is None:
+            raise ValueError("knowledge_not_found")
+        if card["kind"] != "opportunity":
             raise ValueError("not_opportunity_card")
         if card["research_status"] == status:
             return {"knowledge_id": knowledge_id, "research_status": status, "changed": False}

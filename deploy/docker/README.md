@@ -502,7 +502,7 @@ GPU Appliance 显示的约 9.34 GB 是 Docker 镜像层在宿主磁盘上的占�
 
 agent 端点为 `https://infoos.example.com/mcp`，使用独立设备 Token 的 Bearer 鉴权。只读问答仅需 `intelligence:read`；定时知识整理需 `intelligence:read` + `evaluation:write`，先读画像、rubric 与知识卡 schema，再分诊、拆解与归并，回读知识卡证据。初始化画像另用交互式 `profile:write`；来源修改和商机调研状态修改分别需要交互式 `sources:write`、`verification:write`，并按用户决定执行。
 
-完整工具清单与各 scope 见[安装指南](../../docs/INSTALL-for-agents.md#5-mcp-工具与权限)，Codex CLI 定时启动器、受限 Token 文件及 `agent.env` 配置见[外部 agent 手册](../../docs/engineering/opportunity-agent-runbook.md)。旧商机拆解、核实与跟进工具仍注册，保留兼容，不作为新知识卡主链。`feedback:write` 允许创建 Token，但当前无对应 MCP feedback 工具。未设置 `INFOOS_PUBLIC_BASE_URL` 时，返回的深链接是相对路径。
+完整工具清单与各 scope 见[安装指南](../../docs/INSTALL-for-agents.md#5-mcp-工具与权限)，Codex CLI 定时启动器、受限 Token 文件及 `agent.env` 配置见[外部 agent 手册](../../docs/engineering/opportunity-agent-runbook.md)。旧商机拆解、核实与跟进工具已下线；历史拆解仍可在信息卡阅读。`feedback:write` 允许创建 Token，但当前无对应 MCP feedback 工具。未设置 `INFOOS_PUBLIC_BASE_URL` 时，返回的深链接是相对路径。
 
 ### 公网全站边缘鉴权
 
@@ -532,7 +532,7 @@ python3 deploy/docker/deploy-existing.py --environment test \
 - `/r/`：当前页面 `/r/card/:id`、`/r/brief/:date`、`/r/browse`、`/r/knowledge`、`/r/knowledge/:id`、`/r/opportunities`、`/r/opportunities/stats`。
 - `/assets/`：构建后的 JS、CSS 等前端静态资源。
 - 裸 `/api/card-preview` 列表、`/api/card-preview/facets` 筛选项、`/api/card-preview/{card_id}`、`/api/card-preview/assets/{asset_id}`。边缘路径匹配须同时覆盖裸路径与斜杠后缀，例如 `api/card-preview(?:/|$)`，不能只匹配 `api/card-preview/`。这些读取仍经过原有 Authelia 和容器阅读鉴权。
-- `/api/opportunities/board`、`/api/opportunities/stats`、`/api/opportunities/{card_id}`：GET/HEAD。唯一额外放行的写路径为 `PUT /api/opportunities/{card_id}/follow-up`；同样做阅读鉴权，并由应用全局同源变更检查保护，其他路径的 PUT/DELETE 仍拒绝。
+- `/api/opportunities/board`、`/api/opportunities/stats`：GET/HEAD。唯一额外放行的写路径为 `PUT /api/opportunities/{knowledge_id}/research-status`；同样做阅读鉴权，并由应用全局同源变更检查保护，其他路径的 PUT/DELETE 仍拒绝。
 - `/api/intelligence/daily-brief/{brief_date}`；不包括 `/rebuild`。知识卡列表 `/api/intelligence/knowledge` 与单卡 `/api/intelligence/knowledge/{knowledge_id}`。
 - `/favicon.ico`：浏览器自动请求，鉴权后容器返回空 204；使用同一阅读鉴权，边缘同样限制 GET/HEAD。
 

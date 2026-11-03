@@ -130,7 +130,7 @@ export function CreateTokenDialog({ open, token, busy, error, onClose, onCreate 
             <label key={scope}>
               <input type="checkbox" aria-label={scope} checked={scopes.includes(scope)} disabled={busy}
                 onChange={(event) => toggle(scope, event.target.checked)} />
-              <span><strong>{scope}</strong><small>{scope === "intelligence:read" ? "通过 MCP 检索和读取情报" : scope === "profile:write" ? "更新关注画像" : scope === "evaluation:write" ? "通过 MCP 写回卡片评估" : scope === "collect:write" ? "通过 MCP 发起调研、提交链接捕获" : scope === "sources:write" ? "通过 MCP 新增、修改、启停来源（仅交互式 agent）" : scope === "verification:write" ? "写入商机核实记录与跟进状态（仅交互式 agent）" : "预留：提交反馈"}</small></span>
+              <span><strong>{scope}</strong><small>{scope === "intelligence:read" ? "通过 MCP 检索和读取情报" : scope === "profile:write" ? "更新关注画像" : scope === "evaluation:write" ? "通过 MCP 写回卡片评估" : scope === "collect:write" ? "通过 MCP 发起调研、提交链接捕获" : scope === "sources:write" ? "通过 MCP 新增、修改、启停来源（仅交互式 agent）" : scope === "verification:write" ? "写入商机调研状态（仅交互式 agent）" : "预留：提交反馈"}</small></span>
             </label>
           ))}
         </fieldset>

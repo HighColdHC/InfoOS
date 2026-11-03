@@ -2,15 +2,11 @@
 import pytest
 
 from backend.read_models.new_cards import list_new_cards
-from backend.read_models.opportunities import list_opportunities, list_opportunity_candidates
 from backend.read_models.research_runs import decode_research_cursor
-from backend.read_models.verifications import list_verifications
 
 
 @pytest.mark.parametrize("read,arguments", [
     (list_new_cards, {"since": "2026-10-17T00:00:00Z"}),
-    (list_opportunity_candidates, {"since": "2026-10-17T00:00:00Z"}),
-    (list_opportunities, {}), (list_verifications, {}),
 ])
 def test_empty_cursor_equals_omitted(tmp_path, read, arguments):
     assert read(tmp_path, **arguments, cursor="") == read(tmp_path, **arguments)

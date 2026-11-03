@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import math
 import re
 import sqlite3
 from pathlib import Path
@@ -30,7 +31,7 @@ def select_views(database: Path) -> dict:
             WHERE k.superseded_by IS NULL GROUP BY k.knowledge_id
             ORDER BY n DESC, length(k.fields_json) DESC LIMIT 1""").fetchone()
         totals = {table: db.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
-                  for table in ("sources", "cards", "knowledge_cards", "tasks", "opportunity_breakdowns")}
+                  for table in ("sources", "cards", "knowledge_cards", "tasks")}
         kinds = dict(db.execute("SELECT kind,count(*) FROM knowledge_cards GROUP BY kind"))
         card_id = db.execute("""SELECT card_id FROM cards WHERE card_id IN
             (SELECT card_id FROM knowledge_evidence WHERE knowledge_id=?)
@@ -39,7 +40,7 @@ def select_views(database: Path) -> dict:
             "evidence_count": evidence_count, "card_id": card_id, "knowledge_kinds": kinds, "totals": totals}
 
 
-def capture(base_url: str, runtime: Path, phase: str):
+def capture(base_url: str, runtime: Path, phase: str, only: list[str] | None = None):
     if urlsplit(base_url).hostname != "127.0.0.1":
         raise ValueError("Use only the disposable loopback demo")
     values = corpus(runtime / "data/infoos.sqlite3")
@@ -105,7 +106,9 @@ def capture(base_url: str, runtime: Path, phase: str):
                 }
                 return out;
             }"""
-            numbers = page.evaluate(numeric_nodes, policy()["identity_selectors"] + policy()["identifier_selectors"])
+            numeric_exclusions = (policy()["identity_selectors"] + policy()["identifier_selectors"]
+                                  + list(policy()["field_selectors"]))
+            numbers = page.evaluate(numeric_nodes, numeric_exclusions)
             appearance = page.evaluate("[getComputedStyle(document.body).backgroundColor, document.styleSheets.length]")
             privacy = redact(page, values, audit)
             visible_text = page.locator("body").inner_text()
@@ -117,13 +120,20 @@ def capture(base_url: str, runtime: Path, phase: str):
                 raise RuntimeError("Redaction changed a statistic or interface label: " + json.dumps(structure))
             if page.evaluate(ui_nodes, policy()) != interface:
                 raise RuntimeError("Redaction changed static product interface text")
-            if page.evaluate(numeric_nodes, policy()["identity_selectors"] + policy()["identifier_selectors"]) != numbers:
+            if page.evaluate(numeric_nodes, numeric_exclusions) != numbers:
                 raise RuntimeError("Redaction changed a numeric/date text node")
             if page.evaluate("[getComputedStyle(document.body).backgroundColor, document.styleSheets.length]") != appearance:
                 raise RuntimeError("Redaction changed the product stylesheet")
             if name == "knowledge-detail":
                 page.get_by_role("heading", name="原文证据", exact=True).evaluate(
                     "e => window.scrollBy(0, e.getBoundingClientRect().top - 64)")
+            if name == "opportunity-board":
+                tiles = page.locator(".board > .col").first.locator(".tile")
+                last = tiles.nth(min(4, tiles.count()) - 1).bounding_box()
+                page.set_viewport_size({"width": 1440, "height": math.ceil(last["y"] + last["height"] + 4)})
+            if name == "opportunity-stats":
+                last = page.locator(".opportunities-stats .block").last.bounding_box()
+                page.set_viewport_size({"width": 1440, "height": math.ceil(last["y"] + last["height"] + 32)})
             page.mouse.move(0, 0)
             raw = page.screenshot(animations="disabled")
             # Keep scripts disabled until visit() closes this disposable page.
@@ -166,17 +176,20 @@ def capture(base_url: str, runtime: Path, phase: str):
                 ("/?menu=tasks", "collection-tasks", "有完成证据的采集运行"),
                 ("/?menu=environment", "collection-environment", "真实组件版本、会话快照与通知空态"),
                 ("/?menu=logs", "export-and-logs", "导出能力与本实例日志"),
-                ("/r/opportunities", "opportunity-board", "历史商机的跟进看板"),
-                ("/r/opportunities/stats", "opportunity-stats", "历史商机统计"),
+                ("/r/opportunities", "opportunity-board", "商机知识卡调研看板"),
+                ("/r/opportunities/stats", "opportunity-stats", "商机知识卡统计"),
                 ("/?menu=tokens", "token-permissions", "已清除真实凭据的权限管理"),
                 ("/?menu=account", "account-settings", "隔离临时账号表单"),
             ]
             context.set_extra_http_headers({"x-infoos-edge-authenticated": "1"})
-            status = context.request.get(base_url + "/api/collector-status")
-            assert status.ok
-            report["collector_status"] = status.json()
-            assert report["collector_status"]["service_status"] == "ready", "Collector is not ready"
+            if not only:
+                status = context.request.get(base_url + "/api/collector-status")
+                assert status.ok
+                report["collector_status"] = status.json()
+                assert report["collector_status"]["service_status"] == "ready", "Collector is not ready"
             for path, name, description in entries:
+                if only and name not in only:
+                    continue
                 visit(path)
                 if name == "source-management":
                     response = context.request.get(base_url + "/api/configurable-sources?limit=1")
@@ -219,14 +232,33 @@ def capture(base_url: str, runtime: Path, phase: str):
                     page.wait_for_function("id => document.querySelector('.collector-card-detail__facts code')?.textContent === id", arg=card_id)
                     page.locator(".card-eval__meters").wait_for()
                 if name == "opportunity-board":
-                    page.get_by_label("新推荐范围").select_option("false")
                     page.locator(".board[aria-busy='false']").wait_for()
+                    page.locator(".opportunities .tile").first.wait_for()
+                    assert page.locator(".board > .col").count() == 5
+                    response = context.request.get(base_url + "/api/opportunities/board?limit=50&offset=0")
+                    assert response.ok
+                    columns = response.json()["columns"]
+                    report["opportunity_columns"] = [{"status": c["status"], "total": c["total"]} for c in columns]
+                    assert page.locator(".col__head > span").all_text_contents() == [str(c["total"]) for c in columns]
+                if name == "opportunity-stats":
+                    page.get_by_text("正在加载统计…", exact=True).wait_for(state="hidden")
+                    page.locator(".opportunities-stats .stack__row").first.wait_for()
+                    page.locator(".opportunities-stats .block").last.wait_for()
+                    response = context.request.get(base_url + "/api/opportunities/stats?window=all")
+                    assert response.ok
+                    report["opportunity_stats"] = response.json()
+                    assert page.locator(".opportunities-stats > p").inner_text() == f"商机知识卡共 {response.json()['total']} 张"
                 if name in {"collection-environment", "daily-brief", "knowledge-library", "collection-tasks", "opportunity-stats"}:
                     page.set_viewport_size({"width": 1440, "height": 1400})
                 if name in {"card-management", "card-detail"}:
                     page.set_viewport_size({"width": 1440, "height": 1200})
                 if name in {"card-browse", "opportunity-board"}:
                     page.set_viewport_size({"width": 1440, "height": 1100})
+                if name == "opportunity-board":
+                    page.evaluate("scrollTo(0, 0)")
+                if name == "opportunity-stats":
+                    page.set_viewport_size({"width": 1440, "height": 1600})
+                    page.evaluate("scrollTo(0, 0)")
                 shot(name, description)
                 page.set_viewport_size({"width": 1440, "height": 900})
                 if name == "collection-tasks":
@@ -243,9 +275,10 @@ def capture(base_url: str, runtime: Path, phase: str):
                     page.wait_for_load_state("networkidle")
                     page.locator(".collector-task-trace").wait_for()
                     shot("run-trace", "当前完成运行中完善卡片最多的完整链路")
-            visit("/r/knowledge")
-            page.set_viewport_size({"width": 390, "height": 844})
-            shot("knowledge-library-mobile", "390×844 全部知识类型计数与卡片")
+            if not only:
+                visit("/r/knowledge")
+                page.set_viewport_size({"width": 390, "height": 844})
+                shot("knowledge-library-mobile", "390×844 全部知识类型计数与卡片")
         context.close()
         browser.close()
         if errors:
@@ -264,5 +297,6 @@ if __name__ == "__main__":
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--runtime-dir", type=Path, required=True)
     parser.add_argument("--phase", choices=["empty", "live"], required=True)
+    parser.add_argument("--only", nargs="+", choices=["opportunity-board", "opportunity-stats"])
     args = parser.parse_args()
-    capture(args.base_url, args.runtime_dir, args.phase)
+    capture(args.base_url, args.runtime_dir, args.phase, args.only)

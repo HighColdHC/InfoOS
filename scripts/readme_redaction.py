@@ -162,11 +162,13 @@ class IdentifierAudit:
     def __init__(self, identifiers):
         rules = policy()
         self.safe = set(rules["preserve_literals"]) | set(rules["interface_literals"])
-        parts = []
+        groups = {}
         for value in sorted(identifiers - self.safe - {"demo-admin"}, key=len, reverse=True):
-            escaped = re.escape(value)
-            parts.append(r"(?<!\w)" + escaped + r"(?!\w)")
-        self.pattern = re.compile("|".join(parts)) if parts else None
+            groups.setdefault(value[0], []).append(re.escape(value[1:]))
+        # Factor identical boundaries and first characters out of the literal
+        # alternatives, avoiding one boundary check per identifier per character.
+        parts = [re.escape(first) + "(?:" + "|".join(tails) + ")" for first, tails in groups.items()]
+        self.pattern = re.compile(r"(?<!\w)(?:" + "|".join(parts) + r")(?!\w)") if parts else None
 
     def inspect(self, entries):
         return sum(1 for value in entries if " ".join(value.split()) not in self.safe
@@ -251,6 +253,11 @@ DOM_REDACTION = r"""({rules, identities, headings}) => {
     nodes.push(node);
     const original = node.nodeValue;
     if (element.closest(rules.preserve_selectors.join(','))) continue;
+    const field = Object.entries(rules.field_selectors).find(([selector]) => element.closest(selector));
+    if (field) {
+      if (original.trim()) node.nodeValue = fictional(original, field[1], true);
+      continue;
+    }
     if (element.closest(rules.identifier_selectors.join(','))) {
       if (original.trim()) node.nodeValue = fictional(original, 'identifier');
       continue;
@@ -273,6 +280,14 @@ DOM_REDACTION = r"""({rules, identities, headings}) => {
     for (const attr of ['title','alt','data-tooltip','aria-label','placeholder','href','src']) {
       if (!element.hasAttribute(attr)) continue;
       const value = element.getAttribute(attr);
+      const field = attr === 'aria-label' && Object.entries(rules.attribute_field_selectors).find(([selector]) => element.matches(selector));
+      if (field) {
+        element.setAttribute(attr, fictional(value, field[1], true));
+        attributes.push([element,attr]); continue;
+      }
+      if (!['href','src'].includes(attr) && element.matches(rules.preserve_attribute_selectors.join(','))) {
+        attributes.push([element,attr]); continue;
+      }
       const clean = ['href','src'].includes(attr) ? generic(value) :
         safe.has(value.trim()) || isUi(value) ? value : fictional(generic(value), attr === 'alt' ? 'identity' : 'body');
       element.setAttribute(attr, clean); attributes.push([element,attr]);

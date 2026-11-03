@@ -98,15 +98,15 @@ InfoOS 以单容器 Docker Appliance 镜像形式交付；我们在 Linux amd64 
 
 ![导出备份与结构化日志](docs/images/features/export-and-logs.webp)
 
-### 商机跟进：从线索到人工核实
+### 商机看板：管理调研状态
 
-`/r/opportunities` 保留基于信息卡商机拆解的跟进看板，可以筛选线索、决定跟进、归档或恢复自动阶段。已接触、转入行动由人工核实记录推导，实际接触与项目执行仍由用户在站外和 PKM 完成。它与知识库里的商机知识卡及其调研状态是两个入口。
+`/r/opportunities` 展示商机知识卡，按待调研、调研中、已立项、继续观察、放弃分为五列，支持搜索、子类型和来源平台筛选。拖动卡片或在知识卡详情中修改调研状态；实际接触与项目执行仍由用户在站外和 PKM 完成。
 
 ![商机跟进看板](docs/images/features/opportunity-board.webp)
 
-### 商机统计：查看线索与跟进事实
+### 商机统计：查看知识卡分布
 
-`/r/opportunities/stats` 按时间范围展示线索漏斗、平台分布、每日拆解和跟进转化。统计依据运行、卡片和核实记录计算，跨期积累可能使漏斗比例超过 100%。
+`/r/opportunities/stats` 展示调研状态、子类型、赚钱信号类型、每日新增和来源平台分布；每日新增按上海时区的自然日计算。
 
 ![商机统计](docs/images/features/opportunity-stats.webp)
 
